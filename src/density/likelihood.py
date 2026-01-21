@@ -15,7 +15,7 @@ from dataset import load_entity_embeddings, load_embedding_splits
 
 
 MODEL_PATH = "results/flow_model_epoch_0.pt"
-DATASET_PATH = "../data/FB15k-237"
+DATASET_PATH = "../../data/FB15k-237"
 RESULTS_DIR = "results"
 
 def load_flow_model(model_path=MODEL_PATH, device='mps'):

@@ -23,7 +23,7 @@ WANDB_PROJECT = "ML4Graphs"
 WANDB_ENTITY = "scale-gmns"
 EXPERIMENT_NAME = "flow-matching-cqd"
 
-DATASET_PATH = "../data/FB15k-237"
+DATASET_PATH = "../../data/FB15k-237"
 DEFAULT_SEED = 987
 
 

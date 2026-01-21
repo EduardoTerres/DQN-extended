@@ -14,8 +14,8 @@ from kbc.utils import preload_env
 
 
 def load_entity_embeddings(
-    dataset_path="../data/FB15k-237",
-    model_path="../models/FB15k-237-model-rank-1000-epoch-100-1602508358.pt",
+    dataset_path="../../data/FB15k-237",
+    model_path="../../models/FB15k-237-model-rank-1000-epoch-100-1602508358.pt",
     split="valid",
     chain_type=QuerDAG.TYPE1_1.value,
 ):
