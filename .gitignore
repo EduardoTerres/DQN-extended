@@ -1,0 +1,10 @@
+data/*
+results/*
+models/*
+.venv/*
+__pycache__/*
+*.pyc
+.DS_Store
+**/wandb/*
+*.pt
+*.png
