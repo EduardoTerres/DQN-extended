@@ -1,5 +1,6 @@
 import os
 import os.path as osp
+from pathlib import Path
 import sys
 
 os.environ['PYTHONPATH'] = osp.dirname(osp.dirname(osp.abspath(__file__)))
@@ -11,6 +12,10 @@ import torch
 
 from kbc.utils import QuerDAG
 from kbc.utils import preload_env
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DATASET_PATH = REPO_ROOT / "data" / "FB15k-237"
+MODELS_PATH = REPO_ROOT / "models"
 
 
 def load_entity_embeddings(
@@ -87,7 +92,38 @@ def load_embedding_splits(dataset_path="../data/FB15k-237", filename="embedding_
 
     return torch.load(splits_path)
 
+def create_random_vectors(mean=0.0, std=1.0, dim=100, num_vectors=1000):
+    """Create random vectors of norm 2."""
+    vectors = std * torch.randn(num_vectors, dim)
+    return mean * (vectors / vectors.norm(dim=1, keepdim=True))
+
+
+def assert_all_chain_types_match(dataset_path, model_path, split="valid"):
+    """Verify all chain types produce identical entity embeddings."""
+    embeddings = {}
+    for chain_type in QuerDAG:
+        print(f"Loading chain type: {chain_type.value}")
+        try:
+            embeddings[chain_type.value] = load_entity_embeddings(dataset_path, model_path, split, chain_type.value)
+        except Exception as e:
+            print(f"  Error: {e}")
+    
+    if not embeddings:
+        raise ValueError("No valid chain types found")
+    
+    ref_emb = next(iter(embeddings.values()))
+    for chain_type, emb in embeddings.items():
+        assert torch.allclose(ref_emb, emb), f"Mismatch: {chain_type}"
+    
+    print(f"All {len(embeddings)} chain types match")
+
 if __name__ == "__main__":
+    assert_all_chain_types_match(
+        dataset_path=str(DATASET_PATH),
+        model_path=str(MODELS_PATH / "FB15k-237-model-rank-1000-epoch-100-1602508358.pt"),
+        split="valid"
+    )
+    
     # Example usage
     entity_embeddings = load_entity_embeddings()
     print(f"Loaded {entity_embeddings.shape[0]} entity embeddings of dimension {entity_embeddings.shape[1]}.")

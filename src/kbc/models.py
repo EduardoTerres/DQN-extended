@@ -223,7 +223,7 @@ class KBCModel(nn.Module, ABC):
 		with torch.no_grad():
 			*_, scores = scoring_fn(score_all=True)
 
-		return scores
+		return scores, params
 
 	@staticmethod
 	def batch_t_norm(atoms: Tensor, norm_type: str = 'min') -> Tensor:

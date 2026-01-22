@@ -1,5 +1,6 @@
 import os
 import os.path as osp
+from pathlib import Path
 import sys
 
 # for lazy ppl
@@ -23,7 +24,11 @@ WANDB_PROJECT = "ML4Graphs"
 WANDB_ENTITY = "scale-gmns"
 EXPERIMENT_NAME = "flow-matching-cqd"
 
-DATASET_PATH = "../../data/FB15k-237"
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DATASET_PATH = REPO_ROOT / "data" / "FB15k-237"
+RESULTS_DIR = REPO_ROOT / "results"
+
 DEFAULT_SEED = 987
 
 
@@ -192,7 +197,7 @@ def train_flow_matching(
     log_wandb=True,
     val_freq=10,
     save_freq=100,
-    save_path='results/flow_model',
+    save_path=f'{RESULTS_DIR}/flow_model',
     special_epochs = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
     seed=DEFAULT_SEED,
 ):
@@ -209,7 +214,7 @@ def train_flow_matching(
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Save initial random model (epoch 0)
-    initial_checkpoint_path = f"{save_path}_epoch_0.pt"
+    initial_checkpoint_path = f"{save_path}/flow_model_epoch_0.pt"
     torch.save(model.state_dict(), initial_checkpoint_path)
     print(f"Initial model saved to {initial_checkpoint_path}")
 
@@ -288,7 +293,7 @@ def train_flow_matching(
         
         # Save model periodically
         if (epoch + 1) % save_freq == 0 or (epoch + 1) in special_epochs:
-            checkpoint_path = f"{save_path}_epoch_{epoch + 1}.pt"
+            checkpoint_path = f"{save_path}/flow_model_epoch_{epoch + 1}.pt"
             torch.save(model.state_dict(), checkpoint_path)
             print(f"Model checkpoint saved to {checkpoint_path}")
     
@@ -327,11 +332,11 @@ def main():
         device=device,
         val_freq=10,
         save_freq=1_000,
-        save_path='results/flow_model'
+        save_path=f'{RESULTS_DIR}/flow_model'
     )
 
     # Save final model
-    model_save_path = 'results/flow_model_final.pt'
+    model_save_path = f'{RESULTS_DIR}/flow_model/flow_model_final.pt'
     torch.save(flow_model.state_dict(), model_save_path)
     print(f"Final model saved to {model_save_path}")
 

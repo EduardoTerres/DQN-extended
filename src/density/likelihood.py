@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 import sys
+from pathlib import Path
 
 import torch
 from tqdm import tqdm
@@ -11,12 +12,14 @@ os.environ['PYTHONPATH'] = osp.dirname(osp.dirname(osp.abspath(__file__)))
 sys.path.insert(0, os.environ['PYTHONPATH'])
 
 from flow import FlowMatching
-from dataset import load_entity_embeddings, load_embedding_splits
+from dataset import load_entity_embeddings, load_embedding_splits, create_random_vectors
 
 
-MODEL_PATH = "results/flow_model_epoch_0.pt"
-DATASET_PATH = "../../data/FB15k-237"
-RESULTS_DIR = "results"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MODEL_PATH = REPO_ROOT / "results" / "flow_model" / "flow_model_epoch_0.pt"
+DATASET_PATH = REPO_ROOT / "data" / "FB15k-237"
+RESULTS_DIR = REPO_ROOT / "results"
+RESULTS_IMAGE_DIR = RESULTS_DIR / "images"
 
 def load_flow_model(model_path=MODEL_PATH, device='mps'):
     checkpoint = torch.load(model_path, map_location=device)
@@ -46,17 +49,17 @@ def get_stats(likelihoods, name=""):
     return stats
 
 def ensure_results_dir():
-    if not osp.exists(RESULTS_DIR):
-        os.makedirs(RESULTS_DIR)
+    RESULTS_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def analyze_checkpoint(model_path=MODEL_PATH, dataset_path=DATASET_PATH, device=None):
     device = device or ('mps' if torch.backends.mps.is_available() else 'cpu')
     ensure_results_dir()
 
+    dataset_path = Path(dataset_path)
     flow_model, dim = load_flow_model(model_path=model_path, device=device)
-    entity_embeddings = load_entity_embeddings(dataset_path=dataset_path)
-    splits = load_embedding_splits(dataset_path=dataset_path)
+    entity_embeddings = load_entity_embeddings(dataset_path=str(dataset_path))
+    splits = load_embedding_splits(dataset_path=str(dataset_path))
 
     print(f"Loaded {entity_embeddings.shape[0]} embeddings (dim={dim})")
     print(f"Train: {len(splits['train'])}, Val: {len(splits['val'])}, Test: {len(splits['test'])}\n")
@@ -73,17 +76,28 @@ def analyze_checkpoint(model_path=MODEL_PATH, dataset_path=DATASET_PATH, device=
     print(f"Overall: mean={real_all.mean().item():.6f}\n")
 
     # Random baseline
-    random_vectors = torch.randn(len(entity_embeddings), dim)
+    entity_embs_norm = entity_embeddings.norm(dim=1).mean().item()
+    entity_embs_std = entity_embeddings.std().item()
+    random_vectors = create_random_vectors(
+        mean=entity_embs_norm,
+        std=entity_embs_std,
+        dim=entity_embeddings.shape[1],
+        num_vectors=entity_embeddings.shape[0]
+    )
     random_likelihoods = compute_likelihood(random_vectors.numpy(), flow_model, device=device)
     baseline = get_stats(random_likelihoods, "Random")
 
     diff = real_all.mean().item() - baseline['mean']
     print(f"Real vs Random difference: {diff:.6f}")
 
-    # Plots
+    # Plots with shared bins
+    all_vals = torch.cat([real_all, random_likelihoods])
+    x_min, x_max = all_vals.min().item(), all_vals.max().item()
+    bins = np.linspace(x_min, x_max, 100)
+
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].hist(real_all.numpy(), alpha=0.7, label='Real', density=True)
-    axes[0].hist(random_likelihoods.numpy(), alpha=0.7, label='Random', density=True)
+    axes[0].hist(real_all.numpy(), bins=bins, alpha=0.7, label='Real', density=True)
+    axes[0].hist(random_likelihoods.numpy(), bins=bins, alpha=0.7, label='Random', density=True)
     axes[0].axvline(real_all.mean(), color='blue', linestyle='--', alpha=0.5)
     axes[0].axvline(random_likelihoods.mean(), color='orange', linestyle='--', alpha=0.5)
     axes[0].set_xlabel('Bits per Dimension')
@@ -98,7 +112,7 @@ def analyze_checkpoint(model_path=MODEL_PATH, dataset_path=DATASET_PATH, device=
     axes[1].grid(alpha=0.3)
 
     plt.tight_layout()
-    out_path = osp.join(RESULTS_DIR, 'likelihood_comparison.png')
+    out_path = RESULTS_IMAGE_DIR / 'likelihood_comparison.png'
     plt.savefig(out_path, dpi=150, bbox_inches='tight')
     print(f"Plots saved to {out_path}")
     plt.close(fig)
@@ -111,33 +125,41 @@ def plot_checkpoint_evolution(dataset_path=DATASET_PATH, device=None):
     epochs = [0] + list(range(100, 1100, 100)) + list(range(2000, 10001, 1000))
 
     # Use validation split to monitor shift
-    entity_embeddings = load_entity_embeddings(dataset_path=dataset_path)
-    splits = load_embedding_splits(dataset_path=dataset_path)
+    dataset_path = Path(dataset_path)
+    entity_embeddings = load_entity_embeddings(dataset_path=str(dataset_path))
+    splits = load_embedding_splits(dataset_path=str(dataset_path))
     val_embeddings = entity_embeddings[splits['val']].detach().cpu().numpy()
+
+    entity_embs_norm = entity_embeddings.norm(dim=1).mean().item()
+    entity_embs_std = entity_embeddings.std().item()
+    random_vectors = create_random_vectors(
+        mean=entity_embs_norm,
+        std=entity_embs_std,
+        dim=entity_embeddings.shape[1],
+        num_vectors=val_embeddings.shape[0]
+    )
 
     # Collect likelihoods
     epoch_likelihoods = []
     epoch_random = []
     for epoch in tqdm(epochs, desc="Checkpoints", unit="ckpt"):
-        model_path = osp.join(RESULTS_DIR, f"flow_model_epoch_{epoch}.pt")
-        if not osp.exists(model_path):
+        model_path = RESULTS_DIR / "flow_model" / f"flow_model_epoch_{epoch}.pt"
+        if not model_path.exists():
             print(f"Skip epoch {epoch}: checkpoint missing at {model_path}")
             continue
         flow_model, dim = load_flow_model(model_path=model_path, device=device)
         lks = compute_likelihood(val_embeddings, flow_model, device=device, show_progress=False)
         epoch_likelihoods.append((epoch, lks))
-        rand = torch.randn(len(val_embeddings), dim)
-        rand_lks = compute_likelihood(rand.numpy(), flow_model, device=device, show_progress=False)
+        rand_lks = compute_likelihood(random_vectors.numpy(), flow_model, device=device, show_progress=False)
         epoch_random.append((epoch, rand_lks))
 
     if not epoch_likelihoods:
         print("No checkpoints found for evolution plot.")
         return
 
-    # Shared bins for fair comparison
     all_vals = torch.cat([lk for _, lk in epoch_likelihoods] + [lk for _, lk in epoch_random])
     x_min, x_max = all_vals.min().item(), all_vals.max().item()
-    bins = np.linspace(x_min, x_max, 100)  # 20 bins
+    bins = np.linspace(x_min, x_max, 100)
 
     fig, axes = plt.subplots(len(epoch_likelihoods), 1, figsize=(10, 2 * len(epoch_likelihoods)), sharex=True)
     if len(epoch_likelihoods) == 1:
@@ -157,7 +179,7 @@ def plot_checkpoint_evolution(dataset_path=DATASET_PATH, device=None):
     fig.suptitle('Likelihood Shift Across Checkpoints', fontsize=13)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-    out_path = osp.join(RESULTS_DIR, 'likelihood_evolution.png')
+    out_path = RESULTS_IMAGE_DIR / 'likelihood_evolution.png'
     plt.savefig(out_path, dpi=150, bbox_inches='tight')
     print(f"Evolution plot saved to {out_path}")
     plt.close(fig)
