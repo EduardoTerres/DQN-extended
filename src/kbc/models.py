@@ -182,7 +182,8 @@ class KBCModel(nn.Module, ABC):
 
 	@staticmethod
 	def _optimize_variables(scoring_fn: Callable, params: list, optimizer: str,
-							lr: float, max_steps: int):
+							lr: float, max_steps: int,
+							likelihood_fn: Optional[Callable] = None):
 		if optimizer == 'adam':
 			optimizer = optim.Adam(params, lr=lr)
 		elif optimizer == 'adagrad':
@@ -202,7 +203,12 @@ class KBCModel(nn.Module, ABC):
 				prev_loss_value = loss_value
 
 				norm, regularizer, _ = scoring_fn()
-				loss = -norm.mean() + regularizer
+				loss = -norm.mean()  + regularizer
+				# print(loss)
+				print(likelihood_fn(params[0]).mean())
+				if likelihood_fn is not None:
+					loss += likelihood_fn(params[0]).mean()
+				# print(loss)
 
 				optimizer.zero_grad()
 				loss.backward()
@@ -253,7 +259,8 @@ class KBCModel(nn.Module, ABC):
 
 	def optimize_chains(self, chains: List, regularizer: Regularizer,
 						max_steps: int = 20, lr: float = 0.1,
-						optimizer: str = 'adam', norm_type: str = 'min'):
+						optimizer: str = 'adam', norm_type: str = 'min',
+						likelihood_fn: Optional[Callable] = None):
 		def scoring_fn(score_all=False):
 			score_1, factors_1 = self.score_emb(lhs_1, rel_1, obj_guess_1)
 			score_2, factors_2 = self.score_emb(obj_guess_1, rel_2, obj_guess_2)
@@ -296,14 +303,13 @@ class KBCModel(nn.Module, ABC):
 			obj_guess_3 = torch.normal(0, self.init_size, lhs_1.shape, device=lhs_1.device, requires_grad=True)
 			params.append(obj_guess_3)
 
-		scores = self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps)
-
-		return scores
+		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, likelihood_fn)
 
 	def optimize_intersections(self, chains: List, regularizer: Regularizer,
 							   max_steps: int = 20, lr: float = 0.1,
 							   optimizer:str = 'adam', norm_type: str = 'min',
-							   disjunctive=False):
+							   disjunctive=False,
+							   likelihood_fn: Optional[Callable] = None):
 		def scoring_fn(score_all=False):
 			score_1, factors = self.score_emb(lhs_1, rel_1, obj_guess)
 			guess_regularizer = regularizer([factors[2]])
@@ -352,12 +358,12 @@ class KBCModel(nn.Module, ABC):
 		obj_guess = torch.normal(0, self.init_size, lhs_2.shape, device=lhs_2.device, requires_grad=True)
 		params = [obj_guess]
 
-		scores = self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps)
-		return scores
+		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, likelihood_fn)
 
 	def optimize_3_3(self, chains: List, regularizer: Regularizer,
 					 max_steps: int = 20, lr: float = 0.1,
-					 optimizer:str = 'adam', norm_type: str = 'min'):
+					 optimizer:str = 'adam', norm_type: str = 'min',
+					 likelihood_fn: Optional[Callable] = None):
 		def scoring_fn(score_all=False):
 			score_1, factors_1 = self.score_emb(lhs_1, rel_1, obj_guess_1)
 			score_2, _ = self.score_emb(obj_guess_1, rel_2, obj_guess_2)
@@ -389,13 +395,12 @@ class KBCModel(nn.Module, ABC):
 		obj_guess_2 = torch.normal(0, self.init_size, lhs_1.shape, device=lhs_1.device, requires_grad=True)
 		params = [obj_guess_1, obj_guess_2]
 
-		scores = self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps)
-		return scores
+		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, likelihood_fn)
 
 	def optimize_4_3(self, chains: List, regularizer: Regularizer,
 					 max_steps: int = 20, lr: float = 0.1,
 					 optimizer: str = 'adam', norm_type: str = 'min',
-					 disjunctive=False):
+					 disjunctive=False, likelihood_fn: Optional[Callable] = None):
 		def scoring_fn(score_all=False):
 			score_1, factors_1 = self.score_emb(lhs_1, rel_1, obj_guess_1)
 			score_2, _ = self.score_emb(lhs_2, rel_2, obj_guess_1)
@@ -432,8 +437,7 @@ class KBCModel(nn.Module, ABC):
 		obj_guess_2 = torch.normal(0, self.init_size, lhs_1.shape, device=lhs_1.device, requires_grad=True)
 		params = [obj_guess_1, obj_guess_2]
 
-		scores = self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps)
-		return scores
+		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, likelihood_fn)
 
 	def get_best_candidates(self,
 			rel: Tensor,

@@ -19,8 +19,8 @@ MODELS_PATH = REPO_ROOT / "models"
 
 
 def load_entity_embeddings(
-    dataset_path="../../data/FB15k-237",
-    model_path="../../models/FB15k-237-model-rank-1000-epoch-100-1602508358.pt",
+    dataset_path=f"{DATASET_PATH}",
+    model_path=f"{MODELS_PATH}/FB15k-237-model-rank-1000-epoch-100-1602508358.pt",
     split="valid",
     chain_type=QuerDAG.TYPE1_1.value,
 ):
@@ -65,7 +65,7 @@ def _create_random_split(entity_embedding_weights, train_ratio, val_ratio, seed=
 
 def save_embedding_splits(
     entity_embedding_weights,
-    dataset_path="../data/FB15k-237",
+    dataset_path=f"{DATASET_PATH}",
     train_ratio=0.7,
     val_ratio=0.15,
     test_ratio=0.15,  # Sums to 1.0
@@ -79,7 +79,7 @@ def save_embedding_splits(
     return splits
 
 
-def load_embedding_splits(dataset_path="../data/FB15k-237", filename="embedding_splits.pt"):
+def load_embedding_splits(dataset_path=f"{DATASET_PATH}", filename="embedding_splits.pt"):
     """Load previously saved splits from disk. Saves them if not existing."""
     splits_path = osp.join(dataset_path, filename)
     if not osp.exists(splits_path):

@@ -18,7 +18,7 @@ import torch.nn as nn
 import torch.optim as optim
 import wandb
 
-from dataset import load_entity_embeddings, load_embedding_splits
+from density.dataset import load_entity_embeddings, load_embedding_splits
 
 WANDB_PROJECT = "ML4Graphs"
 WANDB_ENTITY = "scale-gmns"
