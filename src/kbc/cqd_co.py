@@ -15,12 +15,28 @@ from kbc.utils import QuerDAG
 from kbc.utils import preload_env
 from kbc.metrics import evaluation
 
-from density.likelihood import load_flow_model, compute_likelihood
+from density.likelihood import (
+    load_model,
+    compute_likelihood,
+)
 
-
-DEBUG = True  # Set to False to use full dataset
 
 DATASET = 'FB15k-237'
+
+def get_likelihood_fn(model_type: str):
+    """Get likelihood function based on dataset.
+    
+    Model is either 'flow' or 'vae'.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    model_path = repo_root / "results" / f"{model_type}_model_{DATASET}" / f"{model_type}_model_final.pt"
+
+    model, _ = load_model(model_path=model_path, model_type=model_type, device='cpu')
+    likelihood_fn = (
+        lambda embeddings:
+        compute_likelihood(embeddings, model, model_type=model_type, device="cpu", show_progress=False)
+    )
+    return likelihood_fn
 
 def limit_dataset(dataset, max_samples=100):
     """Limit ChaineDataset to first max_samples in each chain type."""
@@ -48,7 +64,7 @@ def score_queries(args):
     data_complete = pickle.load(open(data_complete_path, 'rb'))
 
     # Limit dataset to first 100 samples in DEBUG mode
-    if DEBUG:
+    if args.debug:
         data_hard = limit_dataset(data_hard, max_samples=100)
         data_complete = limit_dataset(data_complete, max_samples=100)
         print(f"DEBUG MODE: Using only first 100 samples per chain type")
@@ -73,15 +89,7 @@ def score_queries(args):
     returns = None
     params = None
 
-    # Load flow model for likelihood computation
-    repo_root = Path(__file__).resolve().parents[2]
-    model_path = repo_root / "results" / f"flow_model_{DATASET}" / "flow_model_final.pt"
-
-    flow_model, _ = load_flow_model(model_path=model_path, device='mps')
-    likelihood_fn = (
-        lambda embeddings:
-        compute_likelihood(embeddings, flow_model, device="mps", show_progress=False)
-    )
+    likelihood_fn = get_likelihood_fn(model_type=args.model)
 
     if args.chain_type == QuerDAG.TYPE1_1.value:
         # scores = kbc.model.link_prediction(chains)
@@ -181,13 +189,16 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', choices=datasets, help="Dataset in {}".format(datasets), default=DATASET)
     parser.add_argument('--mode', choices=modes, default='test',
                         help="Dataset validation mode in {}".format(modes))
+    parser.add_argument('--debug', action='store_true', help='Activate debug mode with reduced dataset size', default=True)
 
-    parser.add_argument('--chain_type', choices=chain_types, default=QuerDAG.TYPE2_3.value,
+    parser.add_argument('--model', choices=['flow', 'vae'], default='vae', help="Density model for likelihood computation")
+
+    parser.add_argument('--chain_type', choices=chain_types, default=QuerDAG.TYPE1_3.value,
                         help="Chain type experimenting for ".format(chain_types))
 
     parser.add_argument('--t_norm', choices=t_norms, default='prod', help="T-norms available are ".format(t_norms))
     parser.add_argument('--reg', type=float, help='Regularization coefficient', default=None)
-    parser.add_argument('--lr', type=float, default=0.1, help='Learning rate')
+    parser.add_argument('--lr', type=float, default=0.005, help='Learning rate')
     parser.add_argument('--optimizer', type=str, default='adam',
                         choices=['adam', 'adagrad', 'sgd'])
     parser.add_argument('--max-steps', type=int, default=100)

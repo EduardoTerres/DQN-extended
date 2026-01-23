@@ -197,17 +197,24 @@ class KBCModel(nn.Module, ABC):
 		loss_value = 999
 		losses = []
 
+
+		print(params[0].shape)
+		print(torch.norm(params[0], dim=1).mean())
+		print(torch.std(params[0], dim=1).mean())
+
 		with tqdm.tqdm(total=max_steps, unit='iter', disable=False) as bar:
 			i = 0
 			while i < max_steps and math.fabs(prev_loss_value - loss_value) > 1e-9:
 				prev_loss_value = loss_value
 
 				norm, regularizer, _ = scoring_fn()
-				loss = -norm.mean()  + regularizer
+				loss = -norm.mean() + regularizer
 				# print(loss)
-				print(likelihood_fn(params[0]).mean())
+				# print(likelihood_fn(params[0]).mean())
 				if likelihood_fn is not None:
-					loss += likelihood_fn(params[0]).mean()
+					likelihood = likelihood_fn(params[0]).mean()
+					loss -= likelihood
+					print(likelihood)
 				# print(loss)
 
 				optimizer.zero_grad()
