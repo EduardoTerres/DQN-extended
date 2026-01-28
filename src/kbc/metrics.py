@@ -33,10 +33,10 @@ def evaluation(scores, queries, test_ans, test_ans_hard):
         axis1 = np.repeat(range(len(ans_idxs)), len(false_ans))
 
         vals[axis1, axis2] = 1
-        b = torch.tensor(vals, device=scores.device)
+        b = torch.tensor(vals, device=scores.device, dtype=torch.float)
         filter_score = b * score
         argsort = torch.argsort(filter_score, dim=1, descending=True)
-        ans_tensor = torch.tensor(hard_ans_list, device=scores.device, dtype=torch.long)
+        ans_tensor = torch.tensor(hard_ans_list, device=scores.device, dtype=torch.float)
         argsort = torch.transpose(torch.transpose(argsort, 0, 1) - ans_tensor, 0, 1)
         ranking = (argsort == 0).nonzero(as_tuple=False)
         ranking = ranking[:, 1]

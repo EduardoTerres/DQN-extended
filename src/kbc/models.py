@@ -60,7 +60,7 @@ class KBCModel(nn.Module, ABC):
 			filters: Dict[Tuple[int, int], List[int]],
 			batch_size: int = 1000, chunk_size: int = -1
 	):
-		"""
+		"""_
 		Returns filtered ranking for each queries.
 		:param queries: a torch.LongTensor of triples (lhs, rel, rhs)
 		:param filters: filters[(lhs, rel)] gives the rhs to filter from ranking
@@ -197,13 +197,9 @@ class KBCModel(nn.Module, ABC):
 		loss_value = 999
 		losses = []
 
-
-		print(params[0].shape)
-		print(torch.norm(params[0], dim=1).mean())
-		print(torch.std(params[0], dim=1).mean())
-
 		with tqdm.tqdm(total=max_steps, unit='iter', disable=False) as bar:
 			i = 0
+			likelihoods = []
 			while i < max_steps and math.fabs(prev_loss_value - loss_value) > 1e-9:
 				prev_loss_value = loss_value
 
@@ -211,10 +207,11 @@ class KBCModel(nn.Module, ABC):
 				loss = -norm.mean() + regularizer
 				# print(loss)
 				# print(likelihood_fn(params[0]).mean())
-				if likelihood_fn is not None:
-					likelihood = likelihood_fn(params[0]).mean()
-					loss -= likelihood
-					print(likelihood)
+				# if likelihood_fn is not None:
+					# likelihood = torch.mean(likelihood_fn(params[0])) + torch.mean(likelihood_fn(params[1]))
+					# likelihood = torch.mean(torch.Tensor([likelihood_fn(p).mean() for p in params]))
+					# loss -= likelihood
+					# likelihoods.append(likelihood.item())
 				# print(loss)
 
 				optimizer.zero_grad()
@@ -236,7 +233,7 @@ class KBCModel(nn.Module, ABC):
 		with torch.no_grad():
 			*_, scores = scoring_fn(score_all=True)
 
-		return scores, params
+		return scores, params, likelihoods
 
 	@staticmethod
 	def batch_t_norm(atoms: Tensor, norm_type: str = 'min') -> Tensor:

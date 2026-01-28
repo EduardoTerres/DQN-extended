@@ -114,7 +114,7 @@ def kbc_model_load(model_path):
 
 	map_location = None
 	if not torch.cuda.is_available():
-		map_location = torch.device('cpu')
+		map_location = torch.device('mps')
 
 	checkpoint = torch.load(model_path, map_location=map_location)
 
@@ -129,7 +129,7 @@ def kbc_model_load(model_path):
 	else:
 		raise ValueError(f'Model {factorizer_name} not in {models}')
 
-	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	device = "mps"
 	model.to(device)
 
 	regularizer = checkpoint['regularizer']

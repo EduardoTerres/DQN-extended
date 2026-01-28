@@ -16,8 +16,8 @@ import numpy as np
 import torch
 
 
-Device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+GPU_TYPE = "mps"
+Device = torch.device("mps")
 
 def make_batches(size: int, batch_size: int) -> List[Tuple[int, int]]:
     max_batch = int(np.ceil(size / float(batch_size)))
@@ -293,7 +293,7 @@ def preload_env(kbc_path, dataset, graph_type, mode="hard", kg_path=None,
 
             target_ids, keys = get_keys_and_targets([part1], targets, graph_type)
 
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = GPU_TYPE
 
             part1 = np.array(part1)
             part1 = torch.tensor(part1.astype('int64'), device=device)
@@ -340,7 +340,7 @@ def preload_env(kbc_path, dataset, graph_type, mode="hard", kg_path=None,
             if not chain_instructions:
                 chain_instructions = create_instructions([part1[0], part2[0]])
 
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = GPU_TYPE
 
             part1 = np.array(part1)
             part1 = torch.tensor(part1.astype('int64'), device=device)
@@ -390,7 +390,7 @@ def preload_env(kbc_path, dataset, graph_type, mode="hard", kg_path=None,
             if not chain_instructions:
                 chain_instructions = create_instructions([part1[0], part2[0]])
 
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = GPU_TYPE
 
             part1 = np.array(part1)
 
@@ -440,7 +440,7 @@ def preload_env(kbc_path, dataset, graph_type, mode="hard", kg_path=None,
             if not chain_instructions:
                 chain_instructions = create_instructions([part1[0], part2[0]])
 
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = GPU_TYPE
 
             part1 = np.array(part1)
             part1 = torch.tensor(part1.astype('int64'), device=device)
@@ -494,7 +494,7 @@ def preload_env(kbc_path, dataset, graph_type, mode="hard", kg_path=None,
             if not chain_instructions:
                 chain_instructions = create_instructions([part1[0], part2[0], part3[0]])
 
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = GPU_TYPE
 
             part1 = np.array(part1)
             part1 = torch.tensor(part1.astype('int64'), device=device)
@@ -551,7 +551,7 @@ def preload_env(kbc_path, dataset, graph_type, mode="hard", kg_path=None,
             if not chain_instructions:
                 chain_instructions = create_instructions([part1[0], part2[0], part3[0]])
 
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = GPU_TYPE
 
             part1 = np.array(part1)
             part1 = torch.tensor(part1.astype('int64'), device=device)
@@ -613,7 +613,7 @@ def preload_env(kbc_path, dataset, graph_type, mode="hard", kg_path=None,
             if not chain_instructions:
                 chain_instructions = create_instructions([part1[0], part2[0], part3[0]])
 
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = GPU_TYPE
 
             part1 = np.array(part1)
             part1 = torch.tensor(part1.astype('int64'), device=device)
@@ -673,14 +673,16 @@ def preload_env(kbc_path, dataset, graph_type, mode="hard", kg_path=None,
             if not chain_instructions:
                 chain_instructions = create_instructions([part1[0], part2[0], part3[0]])
 
+            device = GPU_TYPE
+
             part1 = np.array(part1)
-            part1 = torch.from_numpy(part1.astype('int64')).cuda()
+            part1 = torch.tensor(part1.astype('int64'), device=device)
 
             part2 = np.array(part2)
-            part2 = torch.from_numpy(part2.astype('int64')).cuda()
+            part2 = torch.tensor(part2.astype('int64'), device=device)
 
             part3 = np.array(part3)
-            part3 = torch.from_numpy(part3.astype('int64')).cuda()
+            part3 = torch.tensor(part3.astype('int64'), device=device)
 
             chain1 = kbc.model.get_full_embeddigns(part1)
             chain2 = kbc.model.get_full_embeddigns(part2)
@@ -730,7 +732,7 @@ def preload_env(kbc_path, dataset, graph_type, mode="hard", kg_path=None,
             if not chain_instructions:
                 chain_instructions = create_instructions([part1[0], part2[0], part3[0]])
 
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = GPU_TYPE
 
             part1 = np.array(part1)
             part1 = torch.tensor(part1.astype('int64'), device=device)
@@ -786,3 +788,23 @@ def preload_env(kbc_path, dataset, graph_type, mode="hard", kg_path=None,
         return env
 
     return env
+
+def limit_dataset(dataset, max_samples=100, seed=987):
+    """Limit ChainedDataset to first max_samples in each chain type with random sampling."""
+    if seed is not None:
+        np.random.seed(seed)
+    
+    chain_types = [
+        'type1_1chain', 'type1_2chain', 'type1_3chain',
+        'type2_2_disj_chain', 'type2_2chain', 'type2_2chain_u',
+        'type2_3chain', 'type3_3chain', 'type4_3_disj_chain',
+        'type4_3chain', 'type4_3chain_u'
+    ]
+    
+    for chain_type in chain_types:
+        if hasattr(dataset, chain_type):
+            chain = getattr(dataset, chain_type)
+            if len(chain) > 0:
+                indices = np.random.choice(len(chain), min(max_samples, len(chain)), replace=False)
+                setattr(dataset, chain_type, [chain[i] for i in indices])
+    return dataset

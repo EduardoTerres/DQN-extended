@@ -69,7 +69,7 @@ class Dataset(object):
                 # Instead of:
                 # q[:, 1] += self.n_predicates // 2
 
-            ranks = model.get_ranking(q, self.to_skip[m], batch_size=500)
+            ranks = model.get_ranking(q, self.to_skip[m], batch_size=1000)
             mean_reciprocal_rank[m] = torch.mean(1. / ranks).item()
             hits_at[m] = torch.FloatTensor((list(map(lambda x: torch.mean((ranks <= x).float()).item(),at))))
 

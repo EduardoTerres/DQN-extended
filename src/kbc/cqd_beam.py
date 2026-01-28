@@ -1,31 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
 import os.path as osp
 import argparse
 import pickle
 import json
+import time
+from pathlib import Path
 
 from kbc.utils import QuerDAG
 from kbc.utils import preload_env
+from kbc.utils import limit_dataset
 
 from kbc.metrics import evaluation
-
 
 def run(kbc_path, dataset_hard, dataset_complete, dataset_name, t_norm='min', candidates=3, scores_normalize=0, kg_path=None, explain=False):
 	experiments = [t.value for t in QuerDAG]
 	experiments.remove(QuerDAG.TYPE1_1.value)
+	experiments.remove(QuerDAG.TYPE1_3_joint.value)
 
 	print(kbc_path, dataset_name, t_norm, candidates)
 
 	path_entries = kbc_path.split('-')
 	rank = path_entries[path_entries.index('rank') + 1] if 'rank' in path_entries else 'None'
 
-	for exp in experiments:
-		metrics = answer(kbc_path, dataset_hard, dataset_complete, t_norm, exp, candidates, scores_normalize, kg_path, explain)
+	# Create results directory if it doesn't exist
+	results_dir = Path(args.results_dir)
+	if not results_dir.exists():
+		results_dir.mkdir(parents=True, exist_ok=True)
 
-		with open(f'topk_d={dataset_name}_t={t_norm}_e={exp}_rank={rank}_k={candidates}_sn={scores_normalize}.json', 'w') as fp:
+	for exp in experiments:
+		print(f"Running experiment: {exp}")
+		start_time = time.time()
+		metrics = answer(kbc_path, dataset_hard, dataset_complete, t_norm, exp, candidates, scores_normalize, kg_path, explain)
+		end_time = time.time()
+		metrics['time_taken'] = end_time - start_time
+
+		result_file = results_dir / f'topk_d={dataset_name}_t={t_norm}_e={exp}_rank={rank}_k={candidates}_sn={scores_normalize}.json'
+		with open(result_file, 'w') as fp:
 			json.dump(metrics, fp)
+		print(f"Result saved to {result_file}")
 	return
 
 
@@ -41,7 +56,6 @@ def answer(kbc_path, dataset_hard, dataset_complete, t_norm='min', query_type=Qu
 	kbc = env.kbc
 
 	scores = kbc.model.query_answering_BF(env, candidates, t_norm=t_norm , batch_size=1, scores_normalize = scores_normalize, explain=explain)
-	print(scores.shape)
 
 	queries = env.keys_hard
 	test_ans_hard = env.target_ids_hard
@@ -107,6 +121,13 @@ if __name__ == "__main__":
 						action='store_true',
 						help='Generate log file with explanations for 2p queries')
 
+	parser.add_argument(
+		'--debug',
+		action='store_true',
+		help='Activate debug mode with reduced dataset size')
+	
+	parser.add_argument('--results_dir', type=str, default='results/reproduce/', help='Directory to save results')
+
 	args = parser.parse_args()
 
 	dataset = osp.basename(args.path)
@@ -119,6 +140,11 @@ if __name__ == "__main__":
 	data_complete = pickle.load(open(data_complete_path, 'rb'))
 
 	candidates = int(args.candidates)
+	if args.debug:
+		data_hard = limit_dataset(data_hard, max_samples=500)
+		data_complete = limit_dataset(data_complete, max_samples=500)
+		print(f"DEBUG MODE: Using only first 500 samples per chain type")
+
 	run(args.model_path, data_hard, data_complete,
 		dataset, t_norm=args.t_norm, candidates=candidates,
 		scores_normalize=int(args.scores_normalize),
