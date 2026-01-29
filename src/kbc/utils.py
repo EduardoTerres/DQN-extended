@@ -17,7 +17,7 @@ import torch
 
 
 GPU_TYPE = "mps"
-Device = torch.device("mps")
+Device = torch.device(GPU_TYPE)
 
 def make_batches(size: int, batch_size: int) -> List[Tuple[int, int]]:
     max_batch = int(np.ceil(size / float(batch_size)))

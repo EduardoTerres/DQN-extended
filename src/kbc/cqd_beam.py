@@ -31,6 +31,8 @@ def run(kbc_path, dataset_hard, dataset_complete, dataset_name, t_norm='min', ca
 		results_dir.mkdir(parents=True, exist_ok=True)
 
 	for exp in experiments:
+		if exp in ['1_2', '2_2', '2_2_disj', '2_3', '4_3_disj']:
+			continue
 		print(f"Running experiment: {exp}")
 		start_time = time.time()
 		metrics = answer(kbc_path, dataset_hard, dataset_complete, t_norm, exp, candidates, scores_normalize, kg_path, explain)

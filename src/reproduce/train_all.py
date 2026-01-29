@@ -29,15 +29,15 @@ QUERY_TYPE_MAPPING = {
 	'3p': '1_3',
 	'2i': '2_2',
 	'3i': '2_3',
-	'ip': '4_3',
 	'pi': '3_3',
+	'ip': '4_3',
 	'2u': '2_2_disj',
 	'up': '4_3_disj'
 }
 
-METHODS = ['beam'] #, 'co']
+METHODS = ['co'] #, 'beam']
 
-DEBUG = True
+DEBUG = False
 
 def run_experiments():
 	results_dir = Path('results/reproduce')
@@ -52,7 +52,7 @@ def run_experiments():
 					'--model_path', config['model'],
 					'--mode', 'test',
 					'--results_dir', 'results/reproduce/beam/',
-					'--candidates', '8',
+					'--candidates', '5',
 					*(['--debug'] if DEBUG else []),
 				]
 				print(f"Running {dataset} - {method.upper()} - All Query Types")
