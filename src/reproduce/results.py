@@ -105,10 +105,10 @@ def plot_histogram(datasets, method='co'):
     plt.show()
 
 # Print combined table
-print_table_with_diff(datasets, [('CQD-CO', 'co'), ('CQD-Beam', 'beam')], metrics=['MRRm_new', 'time_taken'])
+# print_table_with_diff(datasets, [('CQD-CO', 'co'), ('CQD-Beam', 'beam')], metrics=['MRRm_new', 'time_taken'])
 
 # Print table
-# print_table(datasets, [('CQD-CO', 'co'), ('CQD-Beam', 'beam')], metric_name='MRRm_new')
+print_table(datasets, [('CQD-CO', 'co'), ('CQD-Beam', 'beam')], metric_name='MRRm_new')
 
 # Plot histogram
 # plot_histogram(datasets, method='co')

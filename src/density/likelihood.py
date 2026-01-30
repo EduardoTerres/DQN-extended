@@ -19,14 +19,14 @@ from density.vae import VAE
 DATASET = 'FB15k-237'
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MODEL_PATH_FLOW = REPO_ROOT / "results" / f"flow_model_{DATASET}" / "flow_model_final.pt"
+MODEL_PATH_FLOW = REPO_ROOT / "results" / f"flow_model_{DATASET}_2" / "flow_model_epoch_7000.pt"
 MODEL_PATH_VAE = REPO_ROOT / "results" / f"vae_model_{DATASET}" / "vae_model_final.pt"
 
 DATASET_PATH = REPO_ROOT / "data" / DATASET
 RESULTS_DIR = REPO_ROOT / "results"
 RESULTS_IMAGE_DIR = RESULTS_DIR / "images"
 
-MODEL_TYPE = "vae"  # "flow" or "vae"
+MODEL_TYPE = "flow"  # "flow" or "vae"
 
 def load_model(model_path: str, model_type: str, device: str = 'mps'):
     def _load_flow_model(model_path, device='mps'):
@@ -60,6 +60,9 @@ def compute_likelihood(
     ):
     def _compute_likelihood_flow(embeddings, flow_model, device='mps', n_steps=100, batch_size=256, show_progress=True):
         embeddings = torch.tensor(embeddings, dtype=torch.float32, device=device)
+        # Embeddings with norm 1
+        embeddings = embeddings / embeddings.norm(dim=1, keepdim=True)
+
         all_likelihoods = []
         iterator = tqdm(range(0, len(embeddings), batch_size), desc=f"Computing likelihood") if show_progress else range(0, len(embeddings), batch_size)
         for i in iterator:
@@ -128,8 +131,9 @@ def analyze_checkpoint(device):
     entity_embs_norm = entity_embeddings.norm(dim=1).mean().item()
     entity_embs_std = entity_embeddings.std().item()
     random_vectors = create_random_vectors(
-        # mean=entity_embs_norm,
-        # std=entity_embs_std,
+        mean=entity_embs_norm,
+        std=entity_embs_std,
+        unit_norm=True,
         dim=entity_embeddings.shape[1],
         num_vectors=entity_embeddings.shape[0]
     )
@@ -191,9 +195,8 @@ def plot_checkpoint_evolution(device=None):
     entity_embs_norm = entity_embeddings.norm(dim=1).mean().item()
     entity_embs_std = entity_embeddings.std().item()
     random_vectors = create_random_vectors(
-        # mean=entity_embs_norm,
-        mean=25,
-        # std=entity_embs_std,
+        mean=entity_embs_norm,
+        std=entity_embs_std,
         dim=entity_embeddings.shape[1],
         num_vectors=val_embeddings.shape[0]
     )
@@ -252,8 +255,8 @@ def plot_checkpoint_evolution(device=None):
 
 def main():
     device = 'mps' if torch.backends.mps.is_available() else 'cpu'
-    # analyze_checkpoint(device=device)
-    plot_checkpoint_evolution(device=device)
+    analyze_checkpoint(device=device)
+    # plot_checkpoint_evolution(device=device)
 
 
 if __name__ == '__main__':

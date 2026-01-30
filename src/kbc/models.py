@@ -204,15 +204,14 @@ class KBCModel(nn.Module, ABC):
 				prev_loss_value = loss_value
 
 				norm, regularizer, _ = scoring_fn()
-				loss = -norm.mean() + regularizer
-				# print(loss)
-				# print(likelihood_fn(params[0]).mean())
-				# if likelihood_fn is not None:
+				loss = -norm.mean() # + regularizer
+				print(loss)
+				if likelihood_fn is not None:
 					# likelihood = torch.mean(likelihood_fn(params[0])) + torch.mean(likelihood_fn(params[1]))
-					# likelihood = torch.mean(torch.Tensor([likelihood_fn(p).mean() for p in params]))
-					# loss -= likelihood
-					# likelihoods.append(likelihood.item())
-				# print(loss)
+					likelihood = torch.mean(torch.Tensor([likelihood_fn(p).mean() for p in params])) / 1500
+					loss -= 100.0 * likelihood
+					likelihoods.append(likelihood.item())
+				print(likelihood)
 
 				optimizer.zero_grad()
 				loss.backward()

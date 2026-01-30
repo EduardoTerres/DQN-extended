@@ -98,7 +98,10 @@ class VAE(nn.Module):
     
     def decode(self, z):
         """Decode latent vector to reconstruction"""
-        return self.decoder(z)
+        reconstructed = self.decoder(z)
+        # Normalize vectors rowwise
+        reconstructed = reconstructed / reconstructed.norm(dim=1, keepdim=True)
+        return reconstructed
     
     def forward(self, x):
         """Forward pass through VAE"""
@@ -110,6 +113,8 @@ class VAE(nn.Module):
         """Sample from the model"""
         with torch.no_grad():
             z = torch.randn(n_samples, self.latent_dim, device=device)
+            # Scale latent variance inversely with dimension for stability
+            z = z / (self.latent_dim ** 0.5)
             samples = self.decode(z)
         return samples
     
@@ -168,7 +173,7 @@ def train_vae(
     test_vectors=None,
     epochs=20_000,
     batch_size=1024,
-    lr=1e-7,
+    lr=1e-5,
     latent_dim=128,
     hidden_dim=256,
     beta=1.0,
@@ -305,6 +310,11 @@ def main():
     train_entity_embeddings = entity_embeddings[splits['train']]
     val_entity_embeddings = entity_embeddings[splits['val']]
     test_entity_embeddings = entity_embeddings[splits['test']]
+
+    # Normalize embeddings to unit length
+    train_entity_embeddings = torch.nn.functional.normalize(train_entity_embeddings, p=2, dim=1)
+    val_entity_embeddings = torch.nn.functional.normalize(val_entity_embeddings, p=2, dim=1)
+    test_entity_embeddings = torch.nn.functional.normalize(test_entity_embeddings, p=2, dim=1)
 
     print(f"Train split size: {len(splits['train'])}, Val split size: {len(splits['val'])}, Test split size: {len(splits['test'])}")
 

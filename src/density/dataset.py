@@ -92,11 +92,13 @@ def load_embedding_splits(dataset_path=f"{DATASET_PATH}", filename="embedding_sp
 
     return torch.load(splits_path)
 
-def create_random_vectors(mean=0.0, std=1.0, dim=100, num_vectors=1000):
+def create_random_vectors(mean=0.0, std=1.0, unit_norm=True, dim=100, num_vectors=1000):
     """Create random vectors of norm 2."""
     vectors = std * torch.randn(num_vectors, dim)
-    return mean * (vectors / vectors.norm(dim=1, keepdim=True))
-
+    if unit_norm:
+        return vectors / vectors.norm(dim=1, keepdim=True)
+    else:
+        return mean * (vectors / vectors.norm(dim=1, keepdim=True))
 
 def assert_all_chain_types_match(dataset_path, model_path, split="valid"):
     """Verify all chain types produce identical entity embeddings."""

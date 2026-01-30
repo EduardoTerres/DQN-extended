@@ -51,6 +51,7 @@ def get_likelihood_fn(model_type: str):
 	"""
 	repo_root = Path(__file__).resolve().parents[2]
 	model_path = repo_root / "results" / f"{model_type}_model_{DATASET}" / f"{model_type}_model_final.pt"
+	model_path = repo_root / "results" / f"{model_type}_model_{DATASET}_2" / f"{model_type}_model_epoch_7000.pt"
 
 	model, _ = load_model(model_path=model_path, model_type=model_type, device='mps')
 	likelihood_fn = (
@@ -210,20 +211,20 @@ if __name__ == "__main__":
 	parser.add_argument('--dataset', choices=datasets, help="Dataset in {}".format(datasets), default=DATASET)
 	parser.add_argument('--mode', choices=modes, default='test',
 						help="Dataset validation mode in {}".format(modes))
-	parser.add_argument('--debug', action='store_true', help='Activate debug mode with reduced dataset size')
+	parser.add_argument('--debug', action='store_true', help='Activate debug mode with reduced dataset size', default=False)
 
-	parser.add_argument('--model', choices=['flow', 'vae'], default='vae', help="Density model for likelihood computation")
+	parser.add_argument('--model', choices=['flow', 'vae'], default='flow', help="Density model for likelihood computation")
 
 	parser.add_argument('--chain_type', choices=chain_types, default=QuerDAG.TYPE3_3.value,
 						help="Chain type experimenting for ".format(chain_types))
 
 	parser.add_argument('--t_norm', choices=t_norms, default='prod', help="T-norms available are ".format(t_norms))
 	parser.add_argument('--reg', type=float, help='Regularization coefficient', default=None)
-	parser.add_argument('--lr', type=float, default=0.1, help='Learning rate')
+	parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
 	parser.add_argument('--optimizer', type=str, default='adam',
 						choices=['adam', 'adagrad', 'sgd'])
-	parser.add_argument('--max-steps', type=int, default=1000)
+	parser.add_argument('--max-steps', type=int, default=100)
 
-	parser.add_argument('--results_dir', type=str, default='results/reproduce/', help='Directory to save results')
+	parser.add_argument('--results_dir', type=str, default='results/reproduce/testing', help='Directory to save results')
 
 	main(parser.parse_args())
