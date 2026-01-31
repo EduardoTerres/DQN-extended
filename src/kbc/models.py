@@ -256,6 +256,17 @@ class KBCModel(nn.Module, ABC):
 			raise ValueError(f't_conorm must be "min" or "prod", got {norm_type}')
 
 		return scores
+	
+	@staticmethod
+	def batch_t_conorm_weighted(atoms: Tensor, weights: Tensor, norm_type: str = 'max') -> Tensor:
+		if norm_type == 'min':
+			scores = torch.max(atoms, dim=-1)[0]
+		elif norm_type == 'prod':
+			scores = (1 - torch.prod(1 - atoms, dim=-1) ** weights)
+		else:
+			raise ValueError(f't_conorm must be "min" or "prod", got {norm_type}')
+
+		return scores
 
 	def link_prediction(self, chains: List):
 		lhs_1, rel_1 = self.__get_chains__(chains, graph_type=QuerDAG.TYPE1_1.value)
@@ -264,18 +275,24 @@ class KBCModel(nn.Module, ABC):
 	def optimize_chains(self, chains: List, regularizer: Regularizer,
 						max_steps: int = 20, lr: float = 0.1,
 						optimizer: str = 'adam', norm_type: str = 'min',
-						likelihood_fn: Optional[Callable] = None):
+						likelihood_fn: Optional[Callable] = None,
+						norm_constant_fn: Optional[Callable] = None,
+						):
 		def scoring_fn(score_all=False):
 			score_1, factors_1 = self.score_emb(lhs_1, rel_1, obj_guess_1)
 			score_2, factors_2 = self.score_emb(obj_guess_1, rel_2, obj_guess_2)
 			factors = [factors_1[2], factors_2[2]]
-
 			atoms = torch.sigmoid(torch.cat((score_1, score_2), dim=1))
+			if norm_constant_fn is not None:
+				score_1 = score_1 / hop1_constant.unsqueeze(1)
+				score_2 = score_2 / hop2_constant.unsqueeze(1)
 
 			if len(chains) == 3:
 				score_3, factors_3 = self.score_emb(obj_guess_2, rel_3, obj_guess_3)
-				factors.append(factors_3[2])
 				atoms = torch.cat((atoms, torch.sigmoid(score_3)), dim=1)
+				if norm_constant_fn is not None:
+					score_3 = score_3 / hop3_constant.unsqueeze(1) / 100
+				factors.append(factors_3[2])
 
 			guess_regularizer = regularizer(factors)
 			t_norm = self.batch_t_norm(atoms, norm_type)
@@ -291,14 +308,45 @@ class KBCModel(nn.Module, ABC):
 
 				all_scores = self.batch_t_norm(atoms, norm_type)
 
+			extra_regularizer = score_1.mean() + score_2.mean()
+			if len(chains) == 3:
+				extra_regularizer = extra_regularizer + score_3.mean()
+			guess_regularizer = guess_regularizer + 1e-4 * extra_regularizer
+
 			return t_norm, guess_regularizer, all_scores
 
+		# START
 		if len(chains) == 2:
 			lhs_1, rel_1, rel_2 = self.__get_chains__(chains, graph_type=QuerDAG.TYPE1_2.value)
 		elif len(chains) == 3:
 			lhs_1, rel_1, rel_2, rel_3 = self.__get_chains__(chains, graph_type=QuerDAG.TYPE1_3.value)
 		else:
 			assert False, f'Invalid number of chains: {len(chains)}'
+
+		if norm_constant_fn is not None:
+			random_entity_embeddings = self.embeddings[0].weight[1:20]
+			print("Calculating normalization constants...")
+			with torch.no_grad():
+				# Constant for hop 1
+				hop1_constant = norm_constant_fn(
+					scoring_fn=self.score_emb,
+					r1_emb=rel_1,
+					all_entity_emb=random_entity_embeddings,
+					e1_emb=lhs_1,
+				) / 20
+				# Constant for hop 2
+				hop2_constant = norm_constant_fn(
+					scoring_fn=self.score_emb,
+					r1_emb=rel_2,
+					all_entity_emb=random_entity_embeddings,
+				) / 20
+				# Constant for hop 3
+				if len(chains) == 3:
+					hop3_constant = norm_constant_fn(
+						scoring_fn=self.score_emb,
+						r1_emb=rel_3,
+						all_entity_emb=random_entity_embeddings,
+					) / 20
 
 		obj_guess_1 = torch.normal(0, self.init_size, lhs_1.shape, device=lhs_1.device, requires_grad=True)
 		obj_guess_2 = torch.normal(0, self.init_size, lhs_1.shape, device=lhs_1.device, requires_grad=True)
@@ -313,20 +361,32 @@ class KBCModel(nn.Module, ABC):
 							   max_steps: int = 20, lr: float = 0.1,
 							   optimizer:str = 'adam', norm_type: str = 'min',
 							   disjunctive=False,
-							   likelihood_fn: Optional[Callable] = None):
+							   likelihood_fn: Optional[Callable] = None,
+							   norm_constant_fn: Optional[Callable] = None,
+							   ):
 		def scoring_fn(score_all=False):
 			score_1, factors = self.score_emb(lhs_1, rel_1, obj_guess)
 			guess_regularizer = regularizer([factors[2]])
 			score_2, _ = self.score_emb(lhs_2, rel_2, obj_guess)
 
-			atoms = torch.sigmoid(torch.cat((score_1, score_2), dim=1))
+			score_1 = torch.sigmoid(score_1)
+			# if norm_constant_fn is not None:
+				# score_1 = score_1 ** hop1_constant.unsqueeze(1)
+			score_2 = torch.sigmoid(score_2)
+			# if norm_constant_fn is not None:
+			# 	score_2 = score_2 ** hop2_constant.unsqueeze(1)
+			atoms = torch.cat((score_1, score_2), dim=1)
 
 			if len(chains) == 3:
 				score_3, _ = self.score_emb(lhs_3, rel_3, obj_guess)
-				atoms = torch.cat((atoms, torch.sigmoid(score_3)), dim=1)
+				score_3 = torch.sigmoid(score_3)
+				# if norm_constant_fn is not None:
+				# 	score_3 = score_3 ** hop3_constant.unsqueeze(1)
+				atoms = torch.cat((atoms, score_3), dim=1)
 
+			weights = torch.cat((hop1_constant.unsqueeze(1), hop2_constant.unsqueeze(1)), dim=1)
 			if disjunctive:
-				t_norm = self.batch_t_conorm(atoms, norm_type)
+				t_norm = self.batch_t_conorm_weighted(atoms, norm_type, weights=weights)
 			else:
 				t_norm = self.batch_t_norm(atoms, norm_type)
 
@@ -334,13 +394,20 @@ class KBCModel(nn.Module, ABC):
 			if score_all:
 				score_1 = self.forward_emb(lhs_1, rel_1)
 				score_2 = self.forward_emb(lhs_2, rel_2)
-				atoms = torch.stack((score_1, score_2), dim=-1)
 
 				if disjunctive:
-					atoms = torch.sigmoid(atoms)
+					score_1 = torch.sigmoid(score_1)
+					score_2 = torch.sigmoid(score_2)
+					if norm_constant_fn is not None:
+						score_1 = score_1 ** hop1_constant.unsqueeze(1)
+						score_2 = score_2 ** hop2_constant.unsqueeze(1)
+
+				atoms = torch.stack((score_1, score_2), dim=-1)
 
 				if len(chains) == 3:
 					score_3 = self.forward_emb(lhs_3, rel_3)
+					# if norm_constant_fn is not None:
+					# 	score_3 = score_3 ** hop3_constant.unsqueeze(1)
 					atoms = torch.cat((atoms, score_3.unsqueeze(-1)), dim=-1)
 
 				if disjunctive:
@@ -350,6 +417,8 @@ class KBCModel(nn.Module, ABC):
 
 			return t_norm, guess_regularizer, all_scores
 
+
+		# START
 		if len(chains) == 2:
 			raw_chain = self.__get_chains__(chains, graph_type=QuerDAG.TYPE2_2.value)
 			lhs_1, rel_1, lhs_2, rel_2 = raw_chain
@@ -358,6 +427,44 @@ class KBCModel(nn.Module, ABC):
 			lhs_1, rel_1, lhs_2, rel_2, lhs_3, rel_3 = raw_chain
 		else:
 			raise ValueError(f'Invalid number of intersections: {len(chains)}')
+
+		if norm_constant_fn is not None:
+			random_entity_embeddings = self.embeddings[0].weight[1:1000]
+			print("Calculating normalization constants...")
+			with torch.no_grad():
+				# Constant for hop 1
+				hop1_constant = norm_constant_fn(
+					scoring_fn=self.score_emb,
+					r1_emb=rel_1,
+					all_entity_emb=random_entity_embeddings,
+					e1_emb=lhs_1,
+				) / 1000
+				# Constant for hop 2
+				hop2_constant = norm_constant_fn(
+					scoring_fn=self.score_emb,
+					r1_emb=rel_2,
+					all_entity_emb=random_entity_embeddings,
+					e1_emb=lhs_2,
+				) / 1000
+				sum = hop1_constant + hop2_constant
+				# Constant for hop 3
+				if len(chains) == 3:
+					hop3_constant = norm_constant_fn(
+						scoring_fn=self.score_emb,
+						r1_emb=rel_3,
+						all_entity_emb=random_entity_embeddings,
+						e1_emb=lhs_3,
+					) / 1000
+					sum = sum + hop3_constant
+				
+				hop1_constant = 1 / hop1_constant
+				hop2_constant = 1 / hop2_constant
+				# hop1_constant = hop1_constant / sum
+				# hop2_constant = hop2_constant / sum
+				# if len(chains) == 3:
+				# 	hop3_constant = hop3_constant / sum
+				
+				print(hop1_constant, hop2_constant)
 
 		obj_guess = torch.normal(0, self.init_size, lhs_2.shape, device=lhs_2.device, requires_grad=True)
 		params = [obj_guess]

@@ -23,6 +23,7 @@ from density.likelihood import (
 	compute_likelihood,
 )
 
+from density.sum import get_normalization_constant_batch
 
 DATASET = 'FB15k-237'
 import matplotlib.pyplot as plt
@@ -72,8 +73,8 @@ def score_queries(args):
 
 	# Limit dataset to first 100 samples in DEBUG mode
 	if args.debug:
-		data_hard = limit_dataset(data_hard, max_samples=500)
-		data_complete = limit_dataset(data_complete, max_samples=500)
+		data_hard = limit_dataset(data_hard, max_samples=100)
+		data_complete = limit_dataset(data_complete, max_samples=100)
 		print(f"DEBUG MODE: Using only first 500 samples per chain type")
 
 	# Instantiate singleton KBC object
@@ -122,7 +123,9 @@ def score_queries(args):
 										   lr=args.lr,
 										   optimizer=args.optimizer,
 										   norm_type=args.t_norm,
-										   likelihood_fn=likelihood_fn)
+										   likelihood_fn=likelihood_fn,
+										#    norm_constant_fn=get_normalization_constant_batch,
+										   )
 
 	elif args.chain_type in (QuerDAG.TYPE2_2.value, QuerDAG.TYPE2_2_disj.value,
 							 QuerDAG.TYPE2_3.value):
@@ -132,7 +135,9 @@ def score_queries(args):
 												  optimizer=args.optimizer,
 												  norm_type=args.t_norm,
 												  disjunctive=disjunctive,
-												  likelihood_fn=likelihood_fn)
+												  likelihood_fn=likelihood_fn,
+												  norm_constant_fn=get_normalization_constant_batch,
+												  )
 
 	elif args.chain_type == QuerDAG.TYPE3_3.value:
 		returns = kbc.model.optimize_3_3(chains, kbc.regularizer,
@@ -210,11 +215,11 @@ if __name__ == "__main__":
 	parser.add_argument('--dataset', choices=datasets, help="Dataset in {}".format(datasets), default=DATASET)
 	parser.add_argument('--mode', choices=modes, default='test',
 						help="Dataset validation mode in {}".format(modes))
-	parser.add_argument('--debug', action='store_true', help='Activate debug mode with reduced dataset size')
+	parser.add_argument('--debug', action='store_true', help='Activate debug mode with reduced dataset size', default=True)
 
 	parser.add_argument('--model', choices=['flow', 'vae'], default='vae', help="Density model for likelihood computation")
 
-	parser.add_argument('--chain_type', choices=chain_types, default=QuerDAG.TYPE3_3.value,
+	parser.add_argument('--chain_type', choices=chain_types, default=QuerDAG.TYPE2_2_disj.value,
 						help="Chain type experimenting for ".format(chain_types))
 
 	parser.add_argument('--t_norm', choices=t_norms, default='prod', help="T-norms available are ".format(t_norms))
