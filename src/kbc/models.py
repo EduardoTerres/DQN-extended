@@ -201,7 +201,7 @@ class KBCModel(nn.Module, ABC):
 		with tqdm.tqdm(total=max_steps, unit='iter', disable=False) as bar:
 			i = 0
 			likelihoods = []
-			while i < max_steps and math.fabs(prev_loss_value - loss_value) > 1e-9:
+			while i < max_steps and math.fabs(prev_loss_value - loss_value) > 1e-4:
 				prev_loss_value = loss_value
 
 				norm, regularizer, _, density_ref = scoring_fn()
@@ -306,15 +306,15 @@ class KBCModel(nn.Module, ABC):
 					if len(chains) == 3:
 						score_3 = torch.sigmoid(score_3)
 					density_reg = (
-						(score_1 * score_2 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+						(torch.log(score_1 * score_2) + likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
 						+ (
-							score_2
-							* (1 if len(chains) == 3 else score_3)
-							* likelihood_fn(obj_guess_2).unsqueeze(-1)
+							torch.log(score_2
+							* (score_3 if len(chains) == 3 else 1))
+							+ likelihood_fn(obj_guess_2).unsqueeze(-1)
 						).mean()
 					)
 					if len(chains) == 3:
-						density_reg += (score_3 * likelihood_fn(obj_guess_3).unsqueeze(-1)).mean()
+						density_reg += (torch.log(score_3) + likelihood_fn(obj_guess_3).unsqueeze(-1)).mean()
 			return t_norm, guess_regularizer, all_scores, density_reg
 
 		if len(chains) == 2:
@@ -358,6 +358,7 @@ class KBCModel(nn.Module, ABC):
 				t_norm = self.batch_t_norm(atoms, norm_type)
 
 			all_scores = None
+			density_reg = None
 			if score_all:
 				score_1 = self.forward_emb(lhs_1, rel_1)
 				score_2 = self.forward_emb(lhs_2, rel_2)
@@ -386,12 +387,12 @@ class KBCModel(nn.Module, ABC):
 					if len(chains) == 3:
 						score_3 = torch.sigmoid(score_3)
 					if disjunctive:
-						density_reg = ((score_1 + score_2 - score_1 * score_2) * likelihood_fn(obj_guess).unsqueeze(-1)).mean()
+						density_reg = (torch.log(score_1 + score_2 - score_1 * score_2) + likelihood_fn(obj_guess).unsqueeze(-1)).mean()
 					else:
 						scores = score_1 * score_2
 						if len(chains) == 3:
 							scores *= score_3
-						density_reg = (scores * likelihood_fn(obj_guess).unsqueeze(-1)).mean()
+						density_reg = (torch.log(scores) + likelihood_fn(obj_guess).unsqueeze(-1)).mean()
 
 			return t_norm, guess_regularizer, all_scores, density_reg
 
@@ -430,6 +431,7 @@ class KBCModel(nn.Module, ABC):
 			t_norm = self.batch_t_norm(atoms, norm_type)
 
 			all_scores = None
+			density_reg = None
 			if score_all:
 				score_2 = self.forward_emb(obj_guess_1, rel_2)
 				score_3 = self.forward_emb(lhs_2, rel_3)
@@ -452,8 +454,8 @@ class KBCModel(nn.Module, ABC):
 					score_2 = torch.sigmoid(score_2)
 					score_3 = torch.sigmoid(score_3)
 					density_reg = (
-						(score_1 * score_2 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
-						+ (score_2 * score_3 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
+						(torch.log(score_1 * score_2) + likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+						+ (torch.log(score_2 * score_3) + likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
 					)
 
 			return t_norm, guess_regularizer, all_scores, density_reg
@@ -493,6 +495,7 @@ class KBCModel(nn.Module, ABC):
 				t_norm = self.batch_t_norm(conj_atoms, norm_type)
 
 			all_scores = None
+			density_reg = None
 			if score_all:
 				score_3 = self.forward_emb(obj_guess_1, rel_3)
 				if not disjunctive:
@@ -516,13 +519,13 @@ class KBCModel(nn.Module, ABC):
 					score_3 = torch.sigmoid(score_3)
 					if not disjunctive:
 						density_reg = (
-							((score_1 + score_2 - score_1 * score_2) * score_3 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
-							+ (score_3 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
+							(torch.log((score_1 + score_2 - score_1 * score_2) * score_3) + likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+							+ (torch.log(score_3) + likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
 						)
 					else:
 						density_reg = (
-							(score_1 * score_2 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
-							+ (score_3 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
+							(torch.log(score_1 * score_2) + likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+							+ (torch.log(score_3) + likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
 						)
 
 			return t_norm, guess_regularizer, all_scores, density_reg

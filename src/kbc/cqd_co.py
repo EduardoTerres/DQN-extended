@@ -73,9 +73,10 @@ def score_queries(args):
 
 	# Limit dataset to first 100 samples in DEBUG mode
 	if args.debug:
-		data_hard = limit_dataset(data_hard, max_samples=500)
-		data_complete = limit_dataset(data_complete, max_samples=500)
-		print(f"DEBUG MODE: Using only first 500 samples per chain type")
+		max_samples = 200
+		data_hard = limit_dataset(data_hard, max_samples=max_samples)
+		data_complete = limit_dataset(data_complete, max_samples=max_samples)
+		print(f"DEBUG MODE: Using only first {max_samples} samples per chain type")
 
 	# Instantiate singleton KBC object
 	preload_env(args.model_path, data_hard, args.chain_type, mode='hard')
@@ -123,7 +124,10 @@ def score_queries(args):
 										   lr=args.lr,
 										   optimizer=args.optimizer,
 										   norm_type=args.t_norm,
-										   likelihood_fn=likelihood_fn)
+										   likelihood_fn=likelihood_fn,
+										   reg_lambda=args.reg,
+										   conditional=args.conditional,
+										   )
 
 	elif args.chain_type in (QuerDAG.TYPE2_2.value, QuerDAG.TYPE2_2_disj.value,
 							 QuerDAG.TYPE2_3.value):
@@ -133,7 +137,10 @@ def score_queries(args):
 												  optimizer=args.optimizer,
 												  norm_type=args.t_norm,
 												  disjunctive=disjunctive,
-												  likelihood_fn=likelihood_fn)
+												  likelihood_fn=likelihood_fn,
+												  reg_lambda=args.reg,
+												  conditional=args.conditional,
+												  )
 
 	elif args.chain_type == QuerDAG.TYPE3_3.value:
 		returns = kbc.model.optimize_3_3(chains, kbc.regularizer,
@@ -141,7 +148,10 @@ def score_queries(args):
 										lr=args.lr,
 										optimizer=args.optimizer,
 										norm_type=args.t_norm,
-										likelihood_fn=likelihood_fn)
+										likelihood_fn=likelihood_fn,
+										reg_lambda=args.reg,
+										conditional=args.conditional,
+										)
 
 	elif args.chain_type in (QuerDAG.TYPE4_3.value,
 							 QuerDAG.TYPE4_3_disj.value):
@@ -151,7 +161,10 @@ def score_queries(args):
 										optimizer=args.optimizer,
 										norm_type=args.t_norm,
 										disjunctive=disjunctive,
-										likelihood_fn=likelihood_fn)
+										likelihood_fn=likelihood_fn,
+										reg_lambda=args.reg,
+										conditional=args.conditional,
+										)
 	else:
 		raise ValueError(f'Uknown query type {args.chain_type}')
 
@@ -211,7 +224,7 @@ if __name__ == "__main__":
 	parser.add_argument('--dataset', choices=datasets, help="Dataset in {}".format(datasets), default=DATASET)
 	parser.add_argument('--mode', choices=modes, default='test',
 						help="Dataset validation mode in {}".format(modes))
-	parser.add_argument('--debug', action='store_true', help='Activate debug mode with reduced dataset size', default=True)
+	parser.add_argument('--debug', action='store_true', help='Activate debug mode with reduced dataset size', default=False)
 
 	parser.add_argument('--model', choices=['flow', 'vae'], default='flow', help="Density model for likelihood computation")
 
@@ -223,8 +236,11 @@ if __name__ == "__main__":
 	parser.add_argument('--lr', type=float, default=0.1, help='Learning rate')
 	parser.add_argument('--optimizer', type=str, default='adam',
 						choices=['adam', 'adagrad', 'sgd'])
-	parser.add_argument('--max-steps', type=int, default=100)
+	parser.add_argument('--max-steps', type=int, default=1000)
+	parser.add_argument('--ref', type=float, default=1e-4, help='Reference value for early stopping')
 
+	parser.add_argument('--conditional', type=bool, default=False, help='Type of density regularization')
+	
 	parser.add_argument('--results_dir', type=str, default='results/reproduce/testing', help='Directory to save results')
 
 	main(parser.parse_args())
