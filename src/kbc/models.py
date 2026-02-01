@@ -183,7 +183,8 @@ class KBCModel(nn.Module, ABC):
 	@staticmethod
 	def _optimize_variables(scoring_fn: Callable, params: list, optimizer: str,
 							lr: float, max_steps: int,
-							likelihood_fn: Optional[Callable] = None):
+							reg_lambda: float = 1e-4,
+							):
 		if optimizer == 'adam':
 			optimizer = optim.Adam(params, lr=lr)
 		elif optimizer == 'adagrad':
@@ -205,7 +206,7 @@ class KBCModel(nn.Module, ABC):
 
 				norm, regularizer, _, density_ref = scoring_fn()
 				loss = -norm.mean() #+ regularizer
-				loss -= 1e-5 * density_ref
+				loss -= reg_lambda * density_ref
 				print(f"norm: {norm.mean().item()}, regularizer: {regularizer.item()}, density_ref: {density_ref.item()}, loss: {loss.item()}")
 
 				optimizer.zero_grad()
@@ -260,6 +261,7 @@ class KBCModel(nn.Module, ABC):
 						optimizer: str = 'adam', norm_type: str = 'min',
 						likelihood_fn: Optional[Callable] = None,
 						conditional: bool = False,
+						reg_lambda: float = 1e-4,
 						):
 		def scoring_fn(score_all=False):
 			score_1, factors_1 = self.score_emb(lhs_1, rel_1, obj_guess_1)
@@ -329,7 +331,7 @@ class KBCModel(nn.Module, ABC):
 			obj_guess_3 = torch.normal(0, self.init_size, lhs_1.shape, device=lhs_1.device, requires_grad=True)
 			params.append(obj_guess_3)
 
-		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps)
+		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, reg_lambda)
 
 	def optimize_intersections(self, chains: List, regularizer: Regularizer,
 							   max_steps: int = 20, lr: float = 0.1,
@@ -337,6 +339,7 @@ class KBCModel(nn.Module, ABC):
 							   disjunctive=False,
 							   likelihood_fn: Optional[Callable] = None,
 							   conditional: bool = False,
+								reg_lambda: float = 1e-4,
 							   ):
 		def scoring_fn(score_all=False):
 			score_1, factors = self.score_emb(lhs_1, rel_1, obj_guess)
@@ -404,13 +407,14 @@ class KBCModel(nn.Module, ABC):
 		obj_guess = torch.normal(0, self.init_size, lhs_2.shape, device=lhs_2.device, requires_grad=True)
 		params = [obj_guess]
 
-		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, likelihood_fn)
+		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, reg_lambda)
 
 	def optimize_3_3(self, chains: List, regularizer: Regularizer,
 					 max_steps: int = 20, lr: float = 0.1,
 					 optimizer:str = 'adam', norm_type: str = 'min',
 					 likelihood_fn: Optional[Callable] = None,
 					 conditional: bool = False,
+					 reg_lambda: float = 1e-4,
 					 ):
 		def scoring_fn(score_all=False):
 			score_1, factors_1 = self.score_emb(lhs_1, rel_1, obj_guess_1)
@@ -460,7 +464,7 @@ class KBCModel(nn.Module, ABC):
 		obj_guess_2 = torch.normal(0, self.init_size, lhs_1.shape, device=lhs_1.device, requires_grad=True)
 		params = [obj_guess_1, obj_guess_2]
 
-		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, likelihood_fn)
+		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, reg_lambda)
 
 	def optimize_4_3(self, chains: List, regularizer: Regularizer,
 					 max_steps: int = 20, lr: float = 0.1,
@@ -468,6 +472,7 @@ class KBCModel(nn.Module, ABC):
 					 disjunctive=False,
 					 likelihood_fn: Optional[Callable] = None,
 					 conditional: bool = False,
+					 reg_lambda: float = 1e-4,
 					 ):
 		def scoring_fn(score_all=False):
 			score_1, factors_1 = self.score_emb(lhs_1, rel_1, obj_guess_1)
@@ -528,7 +533,7 @@ class KBCModel(nn.Module, ABC):
 		obj_guess_2 = torch.normal(0, self.init_size, lhs_1.shape, device=lhs_1.device, requires_grad=True)
 		params = [obj_guess_1, obj_guess_2]
 
-		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, likelihood_fn)
+		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, reg_lambda)
 
 	def get_best_candidates(self,
 			rel: Tensor,
