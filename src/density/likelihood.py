@@ -67,7 +67,7 @@ def compute_likelihood(
         iterator = tqdm(range(0, len(embeddings), batch_size), desc=f"Computing likelihood") if show_progress else range(0, len(embeddings), batch_size)
         for i in iterator:
             batch = embeddings[i:i + batch_size]
-            likelihoods = flow_model.log_likelihood(batch)
+            likelihoods = flow_model.log_likelihood(batch, n_steps=n_steps)
             all_likelihoods.append(likelihoods)
         
         return torch.cat(all_likelihoods)

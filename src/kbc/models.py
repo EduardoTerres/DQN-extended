@@ -205,7 +205,7 @@ class KBCModel(nn.Module, ABC):
 
 				norm, regularizer, _, density_ref = scoring_fn()
 				loss = -norm.mean() #+ regularizer
-				loss -= 0.01 * density_ref
+				loss -= 1e-5 * density_ref
 				print(f"norm: {norm.mean().item()}, regularizer: {regularizer.item()}, density_ref: {density_ref.item()}, loss: {loss.item()}")
 
 				optimizer.zero_grad()
@@ -258,7 +258,9 @@ class KBCModel(nn.Module, ABC):
 	def optimize_chains(self, chains: List, regularizer: Regularizer,
 						max_steps: int = 20, lr: float = 0.1,
 						optimizer: str = 'adam', norm_type: str = 'min',
-						likelihood_fn: Optional[Callable] = None):
+						likelihood_fn: Optional[Callable] = None,
+						conditional: bool = False,
+						):
 		def scoring_fn(score_all=False):
 			score_1, factors_1 = self.score_emb(lhs_1, rel_1, obj_guess_1)
 			score_2, factors_2 = self.score_emb(obj_guess_1, rel_2, obj_guess_2)
@@ -286,15 +288,31 @@ class KBCModel(nn.Module, ABC):
 
 				all_scores = self.batch_t_norm(atoms, norm_type)
 			else:
-				# Regularization
-				score_1 = torch.sigmoid(score_1)
-				score_2 = torch.sigmoid(score_2)
-				density_reg = (
-					((score_1 * score_2) * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
-					+ (score_2 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
-				)
-				if len(chains) == 3:
-					density_reg += (torch.sigmoid(score_3) * likelihood_fn(obj_guess_3).unsqueeze(-1)).mean()
+				# Unconditional regularization
+				if not conditional:
+					if likelihood_fn is not None:
+						density_reg = (
+							likelihood_fn(obj_guess_1).mean()
+							+ likelihood_fn(obj_guess_2).mean()
+						)
+						if len(chains) == 3:
+							density_reg += likelihood_fn(obj_guess_3).mean()
+				else:
+					# Conditional regularization
+					score_1 = torch.sigmoid(score_1)
+					score_2 = torch.sigmoid(score_2)
+					if len(chains) == 3:
+						score_3 = torch.sigmoid(score_3)
+					density_reg = (
+						(score_1 * score_2 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+						+ (
+							score_2
+							* (1 if len(chains) == 3 else score_3)
+							* likelihood_fn(obj_guess_2).unsqueeze(-1)
+						).mean()
+					)
+					if len(chains) == 3:
+						density_reg += (score_3 * likelihood_fn(obj_guess_3).unsqueeze(-1)).mean()
 			return t_norm, guess_regularizer, all_scores, density_reg
 
 		if len(chains) == 2:
@@ -317,7 +335,9 @@ class KBCModel(nn.Module, ABC):
 							   max_steps: int = 20, lr: float = 0.1,
 							   optimizer:str = 'adam', norm_type: str = 'min',
 							   disjunctive=False,
-							   likelihood_fn: Optional[Callable] = None):
+							   likelihood_fn: Optional[Callable] = None,
+							   conditional: bool = False,
+							   ):
 		def scoring_fn(score_all=False):
 			score_1, factors = self.score_emb(lhs_1, rel_1, obj_guess)
 			guess_regularizer = regularizer([factors[2]])
@@ -351,8 +371,26 @@ class KBCModel(nn.Module, ABC):
 					all_scores = self.batch_t_conorm(atoms, norm_type)
 				else:
 					all_scores = self.batch_t_norm(atoms, norm_type)
+			else:
+				# Unconditional regularization
+				if not conditional:
+					if likelihood_fn is not None:
+						density_reg = likelihood_fn(obj_guess).mean()
+				else:
+					# Conditional regularization
+					score_1 = torch.sigmoid(score_1)
+					score_2 = torch.sigmoid(score_2)
+					if len(chains) == 3:
+						score_3 = torch.sigmoid(score_3)
+					if disjunctive:
+						density_reg = ((score_1 + score_2 - score_1 * score_2) * likelihood_fn(obj_guess).unsqueeze(-1)).mean()
+					else:
+						scores = score_1 * score_2
+						if len(chains) == 3:
+							scores *= score_3
+						density_reg = (scores * likelihood_fn(obj_guess).unsqueeze(-1)).mean()
 
-			return t_norm, guess_regularizer, all_scores
+			return t_norm, guess_regularizer, all_scores, density_reg
 
 		if len(chains) == 2:
 			raw_chain = self.__get_chains__(chains, graph_type=QuerDAG.TYPE2_2.value)
@@ -371,7 +409,9 @@ class KBCModel(nn.Module, ABC):
 	def optimize_3_3(self, chains: List, regularizer: Regularizer,
 					 max_steps: int = 20, lr: float = 0.1,
 					 optimizer:str = 'adam', norm_type: str = 'min',
-					 likelihood_fn: Optional[Callable] = None):
+					 likelihood_fn: Optional[Callable] = None,
+					 conditional: bool = False,
+					 ):
 		def scoring_fn(score_all=False):
 			score_1, factors_1 = self.score_emb(lhs_1, rel_1, obj_guess_1)
 			score_2, _ = self.score_emb(obj_guess_1, rel_2, obj_guess_2)
@@ -394,8 +434,25 @@ class KBCModel(nn.Module, ABC):
 				t_norm = self.batch_t_norm(atoms, norm_type)
 
 				all_scores = t_norm
+			else:
+				# Unconditional regularization
+				if not conditional:
+					if likelihood_fn is not None:
+						density_reg = (
+							likelihood_fn(obj_guess_1).mean()
+							+ likelihood_fn(obj_guess_2).mean()
+						)
+				else:
+					# Conditional regularization
+					score_1 = torch.sigmoid(score_1)
+					score_2 = torch.sigmoid(score_2)
+					score_3 = torch.sigmoid(score_3)
+					density_reg = (
+						(score_1 * score_2 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+						+ (score_2 * score_3 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
+					)
 
-			return t_norm, guess_regularizer, all_scores
+			return t_norm, guess_regularizer, all_scores, density_reg
 
 		lhs_1, rel_1, rel_2, lhs_2, rel_3 = self.__get_chains__(chains, graph_type=QuerDAG.TYPE3_3.value)
 
@@ -408,7 +465,10 @@ class KBCModel(nn.Module, ABC):
 	def optimize_4_3(self, chains: List, regularizer: Regularizer,
 					 max_steps: int = 20, lr: float = 0.1,
 					 optimizer: str = 'adam', norm_type: str = 'min',
-					 disjunctive=False, likelihood_fn: Optional[Callable] = None):
+					 disjunctive=False,
+					 likelihood_fn: Optional[Callable] = None,
+					 conditional: bool = False,
+					 ):
 		def scoring_fn(score_all=False):
 			score_1, factors_1 = self.score_emb(lhs_1, rel_1, obj_guess_1)
 			score_2, _ = self.score_emb(lhs_2, rel_2, obj_guess_1)
@@ -436,8 +496,31 @@ class KBCModel(nn.Module, ABC):
 					atoms = torch.stack((t_conorm.expand_as(score_3), torch.sigmoid(score_3)), dim=-1)
 
 				all_scores = self.batch_t_norm(atoms, norm_type)
+			else:
+				# Unconditional regularization
+				if not conditional:
+					if likelihood_fn is not None:
+						density_reg = (
+							likelihood_fn(obj_guess_1).mean()
+							+ likelihood_fn(obj_guess_2).mean()
+						)
+				else:
+					# Conditional regularization
+					score_1 = torch.sigmoid(score_1)
+					score_2 = torch.sigmoid(score_2)
+					score_3 = torch.sigmoid(score_3)
+					if not disjunctive:
+						density_reg = (
+							((score_1 + score_2 - score_1 * score_2) * score_3 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+							+ (score_3 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
+						)
+					else:
+						density_reg = (
+							(score_1 * score_2 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+							+ (score_3 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
+						)
 
-			return t_norm, guess_regularizer, all_scores
+			return t_norm, guess_regularizer, all_scores, density_reg
 
 		lhs_1, rel_1, lhs_2, rel_2, rel_3 = self.__get_chains__(chains, graph_type=QuerDAG.TYPE4_3.value)
 
