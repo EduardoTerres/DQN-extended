@@ -211,16 +211,16 @@ if __name__ == "__main__":
 	parser.add_argument('--dataset', choices=datasets, help="Dataset in {}".format(datasets), default=DATASET)
 	parser.add_argument('--mode', choices=modes, default='test',
 						help="Dataset validation mode in {}".format(modes))
-	parser.add_argument('--debug', action='store_true', help='Activate debug mode with reduced dataset size', default=False)
+	parser.add_argument('--debug', action='store_true', help='Activate debug mode with reduced dataset size', default=True)
 
 	parser.add_argument('--model', choices=['flow', 'vae'], default='flow', help="Density model for likelihood computation")
 
-	parser.add_argument('--chain_type', choices=chain_types, default=QuerDAG.TYPE3_3.value,
+	parser.add_argument('--chain_type', choices=chain_types, default=QuerDAG.TYPE1_3.value,
 						help="Chain type experimenting for ".format(chain_types))
 
 	parser.add_argument('--t_norm', choices=t_norms, default='prod', help="T-norms available are ".format(t_norms))
 	parser.add_argument('--reg', type=float, help='Regularization coefficient', default=None)
-	parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
+	parser.add_argument('--lr', type=float, default=0.1, help='Learning rate')
 	parser.add_argument('--optimizer', type=str, default='adam',
 						choices=['adam', 'adagrad', 'sgd'])
 	parser.add_argument('--max-steps', type=int, default=100)

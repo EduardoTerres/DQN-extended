@@ -203,15 +203,10 @@ class KBCModel(nn.Module, ABC):
 			while i < max_steps and math.fabs(prev_loss_value - loss_value) > 1e-9:
 				prev_loss_value = loss_value
 
-				norm, regularizer, _ = scoring_fn()
-				loss = -norm.mean() # + regularizer
-				print(loss)
-				if likelihood_fn is not None:
-					# likelihood = torch.mean(likelihood_fn(params[0])) + torch.mean(likelihood_fn(params[1]))
-					likelihood = torch.mean(torch.Tensor([likelihood_fn(p).mean() for p in params])) / 1500
-					loss -= likelihood
-					likelihoods.append(likelihood.item())
-				print(likelihood)
+				norm, regularizer, _, density_ref = scoring_fn()
+				loss = -norm.mean() #+ regularizer
+				loss -= 0.01 * density_ref
+				print(f"norm: {norm.mean().item()}, regularizer: {regularizer.item()}, density_ref: {density_ref.item()}, loss: {loss.item()}")
 
 				optimizer.zero_grad()
 				loss.backward()
@@ -230,7 +225,7 @@ class KBCModel(nn.Module, ABC):
 				print("Search converged early after {} iterations".format(i))
 
 		with torch.no_grad():
-			*_, scores = scoring_fn(score_all=True)
+			*_, scores, _ = scoring_fn(score_all=True)
 
 		return scores, params, likelihoods
 
@@ -280,6 +275,7 @@ class KBCModel(nn.Module, ABC):
 			t_norm = self.batch_t_norm(atoms, norm_type)
 
 			all_scores = None
+			density_reg = None
 			if score_all:
 				if len(chains) == 2:
 					score_2 = self.forward_emb(obj_guess_1, rel_2)
@@ -289,8 +285,17 @@ class KBCModel(nn.Module, ABC):
 					atoms = torch.sigmoid(torch.stack((score_1.expand_as(score_3), score_2.expand_as(score_3), score_3), dim=-1))
 
 				all_scores = self.batch_t_norm(atoms, norm_type)
-
-			return t_norm, guess_regularizer, all_scores
+			else:
+				# Regularization
+				score_1 = torch.sigmoid(score_1)
+				score_2 = torch.sigmoid(score_2)
+				density_reg = (
+					((score_1 * score_2) * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+					+ (score_2 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
+				)
+				if len(chains) == 3:
+					density_reg += (torch.sigmoid(score_3) * likelihood_fn(obj_guess_3).unsqueeze(-1)).mean()
+			return t_norm, guess_regularizer, all_scores, density_reg
 
 		if len(chains) == 2:
 			lhs_1, rel_1, rel_2 = self.__get_chains__(chains, graph_type=QuerDAG.TYPE1_2.value)
@@ -306,7 +311,7 @@ class KBCModel(nn.Module, ABC):
 			obj_guess_3 = torch.normal(0, self.init_size, lhs_1.shape, device=lhs_1.device, requires_grad=True)
 			params.append(obj_guess_3)
 
-		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps, likelihood_fn)
+		return self._optimize_variables(scoring_fn, params, optimizer, lr, max_steps)
 
 	def optimize_intersections(self, chains: List, regularizer: Regularizer,
 							   max_steps: int = 20, lr: float = 0.1,

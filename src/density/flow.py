@@ -79,7 +79,7 @@ class FlowMatching(nn.Module):
         bpd = -log_prob / (self.dim * torch.log(torch.tensor(2.0)))
         return bpd
 
-    def log_likelihood(self, x, n_steps=10, hutchinson=True, n_hutchinson_samples=1):
+    def log_likelihood(self, x, n_steps=20, hutchinson=True, n_hutchinson_samples=1):
         """
         Compute log likelihood of samples.
         
@@ -121,7 +121,7 @@ class FlowMatching(nn.Module):
         logp += torch.distributions.Normal(0, 1).log_prob(x).sum(-1)
         return logp
     
-    def _log_likelihood_hutchinson(self, x, n_steps=100, n_samples=1):
+    def _log_likelihood_hutchinson(self, x, n_steps=20, n_samples=1):
         """Fast log likelihood using Hutchinson's trace estimator"""
         device = x.device
         batch_size = x.shape[0]
