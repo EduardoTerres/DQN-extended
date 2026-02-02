@@ -26,7 +26,8 @@ EXPERIMENT_NAME = "flow-matching-cqd"
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DATASET_PATH = REPO_ROOT / "data" / "FB15k-237"
+DATASET = "FB15k"
+DATASET_PATH = REPO_ROOT / "data" / DATASET
 RESULTS_DIR = REPO_ROOT / "results"
 
 DEFAULT_SEED = 987
@@ -49,13 +50,16 @@ class FlowMatching(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, dim)
+            nn.Linear(hidden_dim, dim),
         )
     
     def forward(self, x, t):
         """Predict velocity field at time t"""
         inp = torch.cat([x, t.view(-1, 1)], dim=1)
-        return self.net(inp)
+        output = self.net(inp)
+        # L2 normalize each vector in the batch to have unit norm
+        output = torch.nn.functional.normalize(output, p=2, dim=1)
+        return output
     
     def sample(self, n_samples, device='cpu', n_steps=100):
         """Sample from the model using Euler integration"""
@@ -75,7 +79,7 @@ class FlowMatching(nn.Module):
         bpd = -log_prob / (self.dim * torch.log(torch.tensor(2.0)))
         return bpd
 
-    def log_likelihood(self, x, n_steps=100, hutchinson=True, n_hutchinson_samples=1):
+    def log_likelihood(self, x, n_steps=20, hutchinson=True, n_hutchinson_samples=1):
         """
         Compute log likelihood of samples.
         
@@ -117,7 +121,7 @@ class FlowMatching(nn.Module):
         logp += torch.distributions.Normal(0, 1).log_prob(x).sum(-1)
         return logp
     
-    def _log_likelihood_hutchinson(self, x, n_steps=100, n_samples=1):
+    def _log_likelihood_hutchinson(self, x, n_steps=20, n_samples=1):
         """Fast log likelihood using Hutchinson's trace estimator"""
         device = x.device
         batch_size = x.shape[0]
@@ -172,9 +176,9 @@ def compute_validation_loss(model, vectors, batch_size, device):
             t = torch.rand(len(x1), device=device)
             x0 = torch.randn_like(x1)
             
-            # Flow matching objective: predict x1 - x0
+            # Flow matching objective: predict normalized (x1 - x0)
             x_t = (1 - t.view(-1, 1)) * x0 + t.view(-1, 1) * x1
-            target = x1 - x0
+            target = torch.nn.functional.normalize(x1 - x0, p=2, dim=1, eps=1e-8)
             
             pred = model(x_t, t)
             loss = ((pred - target) ** 2).mean()
@@ -196,22 +200,38 @@ def train_flow_matching(
     device='mps',
     log_wandb=True,
     val_freq=10,
-    save_freq=100,
+    save_freq=1_000,
     save_path=f'{RESULTS_DIR}/flow_model',
     special_epochs = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
     seed=DEFAULT_SEED,
+    use_lr_scheduler=True,
+    scheduler_patience=20,
+    scheduler_factor=0.5,
+    scheduler_min_lr=1e-8,
 ):
     """Train flow matching model on entity embedding vectors."""
     # Create results directory if it doesn't exist
-    save_dir = osp.dirname(save_path)
-    if save_dir and not osp.exists(save_dir):
-        os.makedirs(save_dir)
+    if not osp.exists(save_path):
+        os.makedirs(save_path)
 
     # Set seed for reproducibility
     set_seed(seed)
     
     model = FlowMatching(dim=train_vectors.shape[1]).to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
+    
+    # Initialize learning rate scheduler
+    scheduler = None
+    if use_lr_scheduler and valid_vectors is not None:
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode='min',
+            factor=scheduler_factor,
+            patience=scheduler_patience,
+            verbose=True,
+            min_lr=scheduler_min_lr
+        )
+        print(f"Learning rate scheduler enabled: ReduceLROnPlateau(patience={scheduler_patience}, factor={scheduler_factor}, min_lr={scheduler_min_lr})")
     
     # Save initial random model (epoch 0)
     initial_checkpoint_path = f"{save_path}/flow_model_epoch_0.pt"
@@ -230,7 +250,11 @@ def train_flow_matching(
                 "lr": lr,
                 "dim": train_vectors.shape[1],
                 "n_samples": len(train_vectors),
-                "device": device
+                "device": device,
+                "use_lr_scheduler": use_lr_scheduler,
+                "scheduler_patience": scheduler_patience if use_lr_scheduler else None,
+                "scheduler_factor": scheduler_factor if use_lr_scheduler else None,
+                "scheduler_min_lr": scheduler_min_lr if use_lr_scheduler else None
             }
         )
         wandb.watch(model, log="all", log_freq=10)
@@ -253,9 +277,9 @@ def train_flow_matching(
             t = torch.rand(len(idx), device=device)
             x0 = torch.randn_like(x1)
             
-            # Flow matching objective: predict x1 - x0
+            # Flow matching objective: predict normalized (x1 - x0)
             x_t = (1 - t.view(-1, 1)) * x0 + t.view(-1, 1) * x1
-            target = x1 - x0
+            target = torch.nn.functional.normalize(x1 - x0, p=2, dim=1, eps=1e-8)
             
             pred = model(x_t, t)
             loss = ((pred - target) ** 2).mean()
@@ -273,6 +297,10 @@ def train_flow_matching(
         val_loss = None
         if valid_vectors is not None and (epoch + 1) % val_freq == 0:
             val_loss = compute_validation_loss(model, valid_vectors, batch_size, device)
+            
+            # Step the learning rate scheduler based on validation loss
+            if scheduler is not None:
+                scheduler.step(val_loss)
         
         if (epoch + 1) % 10 == 0:
             if val_loss is not None:
@@ -282,10 +310,12 @@ def train_flow_matching(
         
         # Log to wandb
         if log_wandb:
+            # Get current learning rate from optimizer
+            current_lr = optimizer.param_groups[0]['lr']
             log_dict = {
                 "epoch": epoch + 1,
                 "train_loss": avg_loss,
-                "learning_rate": lr
+                "learning_rate": current_lr
             }
             if val_loss is not None:
                 log_dict["val_loss"] = val_loss
@@ -321,6 +351,11 @@ def main():
     val_entity_embeddings = entity_embeddings[splits['val']]
     test_entity_embeddings = entity_embeddings[splits['test']]
 
+    # Normalize embeddings to unit length
+    train_entity_embeddings = torch.nn.functional.normalize(train_entity_embeddings, p=2, dim=1)
+    val_entity_embeddings = torch.nn.functional.normalize(val_entity_embeddings, p=2, dim=1)
+    test_entity_embeddings = torch.nn.functional.normalize(test_entity_embeddings, p=2, dim=1)
+
     print(f"Train split size: {len(splits['train'])}, Val split size: {len(splits['val'])}, Test split size: {len(splits['test'])}")
 
     # Train flow matching model
@@ -332,7 +367,7 @@ def main():
         device=device,
         val_freq=10,
         save_freq=1_000,
-        save_path=f'{RESULTS_DIR}/flow_model'
+        save_path=f'{RESULTS_DIR}/flow_model_{DATASET}_2'
     )
 
     # Save final model
