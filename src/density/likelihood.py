@@ -183,6 +183,7 @@ def plot_checkpoint_evolution(device=None):
     ensure_results_dir()
 
     epochs = [0] + list(range(100, 1100, 100)) + list(range(2000, 10001, 1000))
+    epochs = [0] + list(range(100, 1100, 300)) + list(range(2000, 7000, 2000))
 
     # Use validation split to monitor shift
     entity_embeddings = load_entity_embeddings(dataset_path=str(DATASET_PATH))
@@ -255,8 +256,8 @@ def plot_checkpoint_evolution(device=None):
 
 def main():
     device = 'mps' if torch.backends.mps.is_available() else 'cpu'
-    analyze_checkpoint(device=device)
-    # plot_checkpoint_evolution(device=device)
+    # analyze_checkpoint(device=device)
+    plot_checkpoint_evolution(device=device)
 
 
 if __name__ == '__main__':

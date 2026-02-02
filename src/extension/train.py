@@ -4,14 +4,14 @@ import subprocess
 from pathlib import Path
 
 EXPERIMENTS = {
-	'FB15k': {
-		'model': 'models/FB15k-model-rank-1000-epoch-100-1602520745.pt',
-		'data': 'data/FB15k',
-	},
-	# 'FB15k-237': {
-	# 	'model': 'models/FB15k-237-model-rank-1000-epoch-100-1602508358.pt',
-	# 	'data': 'data/FB15k-237',
+	# 'FB15k': {
+	# 	'model': 'models/FB15k-model-rank-1000-epoch-100-1602520745.pt',
+	# 	'data': 'data/FB15k',
 	# },
+	'FB15k-237': {
+		'model': 'models/FB15k-237-model-rank-1000-epoch-100-1602508358.pt',
+		'data': 'data/FB15k-237',
+	},
 	# 'NELL': {
 	# 	'model': 'models/NELL-model-rank-1000-epoch-100-1602499096.pt',
 	# 	'data': 'data/NELL',

@@ -306,11 +306,11 @@ class KBCModel(nn.Module, ABC):
 					if len(chains) == 3:
 						score_3 = torch.sigmoid(score_3)
 					density_reg = (
-						(torch.log(score_1 * score_2) + likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+						(score_1 * score_2 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
 						+ (
-							torch.log(score_2
-							* (score_3 if len(chains) == 3 else 1))
-							+ likelihood_fn(obj_guess_2).unsqueeze(-1)
+							score_2
+							* (score_3 if len(chains) == 3 else 1)
+							* likelihood_fn(obj_guess_2).unsqueeze(-1)
 						).mean()
 					)
 					if len(chains) == 3:
@@ -387,12 +387,12 @@ class KBCModel(nn.Module, ABC):
 					if len(chains) == 3:
 						score_3 = torch.sigmoid(score_3)
 					if disjunctive:
-						density_reg = (torch.log(score_1 + score_2 - score_1 * score_2) + likelihood_fn(obj_guess).unsqueeze(-1)).mean()
+						density_reg = ((score_1 + score_2 - score_1 * score_2) * likelihood_fn(obj_guess).unsqueeze(-1)).mean()
 					else:
 						scores = score_1 * score_2
 						if len(chains) == 3:
 							scores *= score_3
-						density_reg = (torch.log(scores) + likelihood_fn(obj_guess).unsqueeze(-1)).mean()
+						density_reg = (scores * likelihood_fn(obj_guess).unsqueeze(-1)).mean()
 
 			return t_norm, guess_regularizer, all_scores, density_reg
 
@@ -454,8 +454,8 @@ class KBCModel(nn.Module, ABC):
 					score_2 = torch.sigmoid(score_2)
 					score_3 = torch.sigmoid(score_3)
 					density_reg = (
-						(torch.log(score_1 * score_2) + likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
-						+ (torch.log(score_2 * score_3) + likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
+						(score_1 * score_2 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+						+ (score_2 * score_3 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
 					)
 
 			return t_norm, guess_regularizer, all_scores, density_reg
@@ -519,13 +519,13 @@ class KBCModel(nn.Module, ABC):
 					score_3 = torch.sigmoid(score_3)
 					if not disjunctive:
 						density_reg = (
-							(torch.log((score_1 + score_2 - score_1 * score_2) * score_3) + likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
-							+ (torch.log(score_3) + likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
+							((score_1 + score_2 - score_1 * score_2) * score_3 * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+							+ (score_3 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
 						)
 					else:
 						density_reg = (
-							(torch.log(score_1 * score_2) + likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
-							+ (torch.log(score_3) + likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
+							((score_1 * score_2) * likelihood_fn(obj_guess_1).unsqueeze(-1)).mean()
+							+ (score_3 * likelihood_fn(obj_guess_2).unsqueeze(-1)).mean()
 						)
 
 			return t_norm, guess_regularizer, all_scores, density_reg
