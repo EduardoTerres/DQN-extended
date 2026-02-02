@@ -26,7 +26,7 @@ EXPERIMENT_NAME = "flow-matching-cqd"
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DATASET = "FB15k-237"
+DATASET = "FB15k"
 DATASET_PATH = REPO_ROOT / "data" / DATASET
 RESULTS_DIR = REPO_ROOT / "results"
 

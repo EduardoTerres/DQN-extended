@@ -24,7 +24,7 @@ from density.likelihood import (
 )
 
 
-DATASET = 'FB15k-237'
+DATASET = 'FB15k'
 import matplotlib.pyplot as plt
 
 def plot_likelihoods(likelihoods, args):
@@ -51,7 +51,7 @@ def get_likelihood_fn(model_type: str):
 	"""
 	repo_root = Path(__file__).resolve().parents[2]
 	model_path = repo_root / "results" / f"{model_type}_model_{DATASET}" / f"{model_type}_model_final.pt"
-	model_path = repo_root / "results" / f"{model_type}_model_{DATASET}_2" / f"{model_type}_model_epoch_7000.pt"
+	model_path = repo_root / "results" / f"{model_type}_model_{DATASET}_2" / f"{model_type}_model_epoch_10000.pt"
 
 	model, _ = load_model(model_path=model_path, model_type=model_type, device='mps')
 	likelihood_fn = (
@@ -192,6 +192,9 @@ def main(args):
 	
 	if params is not None:
 		norms = torch.norm(params[0], dim=1)
+		metrics['min_norm'] = norms.min().item()
+		metrics['max_norm'] = norms.max().item()
+		metrics['mean_norm'] = norms.mean().item()
 		print(f"Min norm: {norms.min():.4f}, Max norm: {norms.max():.4f}, Mean norm: {norms.mean():.4f}")
 
 	print(metrics)

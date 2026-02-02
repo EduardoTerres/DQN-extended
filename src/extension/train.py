@@ -8,14 +8,14 @@ EXPERIMENTS = {
 		'model': 'models/FB15k-model-rank-1000-epoch-100-1602520745.pt',
 		'data': 'data/FB15k',
 	},
-	'FB15k-237': {
-		'model': 'models/FB15k-237-model-rank-1000-epoch-100-1602508358.pt',
-		'data': 'data/FB15k-237',
-	},
-	'NELL': {
-		'model': 'models/NELL-model-rank-1000-epoch-100-1602499096.pt',
-		'data': 'data/NELL',
-	},
+	# 'FB15k-237': {
+	# 	'model': 'models/FB15k-237-model-rank-1000-epoch-100-1602508358.pt',
+	# 	'data': 'data/FB15k-237',
+	# },
+	# 'NELL': {
+	# 	'model': 'models/NELL-model-rank-1000-epoch-100-1602499096.pt',
+	# 	'data': 'data/NELL',
+	# },
 }
 
 QUERY_TYPES = [
@@ -59,6 +59,8 @@ def run_for(conditional):
 		opt = json.loads(hp_file.read_text())
 
 		for query_type in QUERY_TYPES:
+			if query_type == '1p':
+				continue  # Skip 1p as we use precomputed results
 			chain_type = QUERY_TYPE_MAPPING[query_type]
 			lr, reg = parse_hparams(opt[query_type]['hyperparams'])
 			cmd = [
@@ -80,5 +82,5 @@ def run_for(conditional):
 
 
 if __name__ == "__main__":
-	run_for(conditional=False)
+	# run_for(conditional=False)
 	run_for(conditional=True)
